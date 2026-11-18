@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import STORAGE
 from .database import Session, public, update_settings
-from .models import LiveRecording, LiveSegment, RenderJob, RenderedClip, now
+from .models import LiveRecording, LiveSegment, RenderJob, RenderedClip, TikTokJob, now
 from .schemas import LiveInput
 from .security import inside
 
@@ -56,8 +56,21 @@ def start(request: LiveInput):
             raise ValueError("Уже идёт запись. Сначала остановите текущий эфир")
         options = request.model_dump(exclude={"url", "rights"})
         options["ad_source"] = snapshot(session, duration=request.duration) if request.use_ads else None
+        if request.tiktok_auto.enabled:
+            from .tiktok_auto import validate_setup
+
+            if options["ad_source"] and not request.tiktok_auto.commercial:
+                raise ValueError(
+                    "Для автопубликации роликов с рекламой включите раскрытие коммерческого контента"
+                )
+            validate_setup(session, options["tiktok_auto"], request.duration)
         item = LiveRecording(
-            url=url, platform=platform, active_slot=1, options=options, clipping_enabled=request.auto_clip
+            url=url,
+            platform=platform,
+            active_slot=1,
+            options=options,
+            clipping_enabled=request.auto_clip,
+            auto_tiktok_enabled=request.tiktok_auto.enabled,
         )
         session.add(item)
         try:
@@ -74,6 +87,9 @@ def start(request: LiveInput):
 def stop(identity: str):
     with Session() as session:
         item = required(session, identity)
+        from .tiktok_auto import stop as stop_auto
+
+        stop_auto(session, item)
         if item.active_slot is not None:
             if item.status == "pending":
                 item.status, item.active_slot, item.finished_at = "stopped", None, now()
@@ -115,7 +131,35 @@ def stop_all(session):
     """Глобальная остановка отключает также ещё не поставленные в очередь нарезки."""
     for item in session.scalars(select(LiveRecording)):
         item.clipping_enabled = False
+        item.auto_tiktok_enabled = False
         if item.active_slot is not None:
             item.status = "stopping"
             item.message = "Остановка всех задач"
     session.commit()
+
+
+@router.post("/{identity}/tiktok/{action}")
+def tiktok_control(identity: str, action: str):
+    from .tiktok_auto import stop as stop_auto, validate_setup, set_state
+
+    with Session() as session:
+        item = required(session, identity)
+        if action == "stop":
+            stop_auto(session, item)
+        elif action == "resume":
+            config = item.options.get("tiktok_auto", {})
+            if not config.get("enabled"):
+                raise ValueError("Автопубликация не была включена для этой записи")
+            if session.scalar(
+                select(TikTokJob.id).where(
+                    TikTokJob.account_id == config["account_id"], TikTokJob.status == "interrupted"
+                )
+            ):
+                raise ValueError("Сначала проверьте статус прерванной отправки в разделе TikTok")
+            validate_setup(session, config, item.options["duration"])
+            item.auto_tiktok_enabled = True
+            set_state(item, message="Автопубликация включена", error="", ack_errors_before=now())
+            session.commit()
+        else:
+            raise ValueError("Неизвестная команда TikTok")
+        return public(item)

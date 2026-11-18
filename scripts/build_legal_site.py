@@ -40,7 +40,11 @@ PRIVACY_EN = [
     errors and diagnostic logs. It also stores the account and API data described below.</p>
     <p>Live recording stores the stream URL, title, recording times and local media segments.
     Automatic clipping analyzes completed segments on your computer and retains generated clips.
-    The recorded parts remain until you delete them. Starting a recording does not publish its clips.</p>
+    The recorded parts remain until you delete them. Clips are not published by default.
+    If you explicitly enable an experimental automatic TikTok series before recording, the app
+    stores your account selection, visibility, caption template, interval, limit and authorization.
+    It sends future generated clips and these settings to TikTok without asking for each clip.
+    An enabled series may resume after restarting the app; stop the series to revoke further sending.</p>
     <p>The Windows EXE normally uses <code>%LOCALAPPDATA%\\CLIP TRIBUNE\\storage</code>.
     Running from source normally uses the project's <code>storage</code> folder. Advanced settings
     can change the storage or database location. Files and history remain until you remove them;
@@ -204,6 +208,10 @@ TERMS_EN = [
     Review the selected account, content and visibility before sending or scheduling a task.
     Uploading a TikTok inbox draft requires you to finish publication in TikTok. Direct posting
     depends on the permissions and account settings allowed by TikTok.</p>
+    <p>The optional experimental automatic series sends future clips without individual review.
+    Enabling it authorizes sending using the series settings until it is stopped or its limit is reached.
+    This mode does not follow TikTok's per-post preview and express-consent review workflow;
+    it is not represented as App Review compliant. Platform approval and public posting are not guaranteed.</p>
     <p>Stopping or disconnecting the app cannot undo a file already accepted or a post already
     published by a platform. Manage those posts in the destination service. CLIP TRIBUNE is an
     independent project and is not endorsed by Google, YouTube, TikTok or Twitch.</p>""",
@@ -261,7 +269,11 @@ PRIVACY_RU = [
     ошибки и диагностические журналы. Также локально хранятся данные подключений, описанные ниже.</p>
     <p>Запись эфира сохраняет ссылку, название, время записи и локальные части трансляции.
     Автоматическая нарезка анализирует закрытые части на компьютере и сохраняет готовые клипы.
-    Части записи остаются до вашего удаления. Запуск записи не публикует созданные клипы.</p>
+    Части записи остаются до вашего удаления. По умолчанию клипы не публикуются.
+    Если перед записью вы явно включите экспериментальную автопубликацию в TikTok, приложение
+    сохранит выбранный аккаунт, видимость, шаблон подписи, интервал, лимит и разрешение на серию.
+    Будущие клипы и эти настройки отправляются в TikTok без запроса для каждого ролика.
+    Включённая серия может продолжиться после перезапуска; остановите её, чтобы прекратить отправку.</p>
     <p>EXE обычно использует <code>%LOCALAPPDATA%\\CLIP TRIBUNE\\storage</code>, а запуск из исходников —
     папку <code>storage</code> проекта. Расширенные настройки позволяют изменить расположение
     хранилища или базы. Файлы и история остаются до удаления пользователем; закрытие или удаление
@@ -424,6 +436,10 @@ TERMS_RU = [
     Проверяйте аккаунт, видео и видимость до отправки или назначения задания. После загрузки
     черновика во входящие TikTok нужно завершить публикацию в TikTok. Прямая отправка зависит
     от разрешений и настроек, доступных через платформу.</p>
+    <p>Необязательная экспериментальная серия отправляет будущие клипы без отдельного просмотра.
+    Включение разрешает отправку с настройками серии до остановки или достижения её лимита.
+    Режим не соответствует процессу предварительного просмотра и согласия для каждого поста TikTok
+    и не заявляется как готовый к App Review. Одобрение платформы и публичная публикация не гарантируются.</p>
     <p>Остановка или отключение приложения не отменяет уже принятый платформой файл или готовую
     публикацию. Управляйте ими в соответствующем сервисе. CLIP TRIBUNE — независимый проект,
     не одобренный Google, YouTube, TikTok или Twitch.</p>""",
@@ -547,18 +563,22 @@ def main():
     )
     body = f'''<div class="hero"><div class="wrap"><p class="eyebrow">Windows / Local video studio</p>
 <h1>Свои материалы.<br>Своя трибуна.</h1><p class="lead">CLIP TRIBUNE — локальная студия коротких видео.
-Нарезка, два экрана, ваши рекламные вставки и отправка в YouTube и TikTok из одного приложения.</p>
+Запись эфиров YouTube и Twitch, нарезка, два экрана, ваши рекламные вставки и отправка в YouTube и TikTok.</p>
 <div class="actions"><a class="button primary" href="{REPO}/releases/latest">Скачать для Windows</a>
 <a class="button" href="{REPO}#readme">Инструкция и исходники</a></div></div></div>
 <div class="wrap"><div class="cards"><section class="card"><h2>Монтаж на компьютере</h2>
 <p>FFmpeg обрабатывает видео локально. Для базового монтажа не нужны аккаунты и платная подписка.</p></section>
-<section class="card"><h2>Публикация под контролем</h2><p>Вы выбираете аккаунт, ролик и настройки отправки.
-Онлайн-интеграции требуют собственных ключей и разрешений платформ.</p></section>
+<section class="card"><h2>Эфир → клипы → TikTok</h2><p>Необязательная экспериментальная автопубликация:
+вы заранее выбираете аккаунт, видимость, интервал и лимит. Отправка работает без подтверждения каждого клипа,
+зависит от разрешений TikTok и не заявляется как совместимая с App Review.</p>
+<a href="{REPO}/blob/main/docs/autopublishing.md">Настройка и ограничения →</a></section>
 <section class="card"><h2>Понятно о данных</h2><p>Читайте, что хранится локально, когда данные уходят
 сервисам и как удалить свои подключения и файлы.</p><a href="privacy-ru.html">Политика конфиденциальности →</a></section></div>
 <section class="home-detail" lang="en"><h2>About CLIP TRIBUNE</h2><p>A Windows desktop video editor
 for short clips, split-screen compositions and user-provided overlays. Optional integrations upload
-selected videos to YouTube and TikTok, subject to platform permissions. The app is maintained by
+selected videos to YouTube and TikTok, subject to platform permissions. An opt-in experimental live-stream
+series can also send generated clips to TikTok without per-clip confirmation; it is not represented as App Review compliant.
+The app is maintained by
 {OWNER} and is independent of those platforms.</p><p><a href="terms.html">Terms of Service</a> ·
 <a href="privacy.html">Privacy Policy</a> · <a href="terms-ru.html" lang="ru">Условия на русском</a></p>
 <p>Contact: {CONTACT}</p></section></div>'''

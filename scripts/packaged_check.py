@@ -222,6 +222,36 @@ def run(report_path):
     from desktop.pages import PAGES
     import tkinter as tk
 
+    # Тестовое подключение только для черновиков. Выбор Direct Post не должен
+    # отправлять его фиктивный токен во внешний API или открывать окно ошибки.
+    from backend.database import Session
+    from backend.models import TikTokAccount, now
+    from backend.security import encrypt
+
+    with Session() as session:
+        test_account = TikTokAccount(
+            open_id="self-check-account",
+            name="Permission check",
+            tokens=encrypt(
+                dict(
+                    access_token="local-test-only",
+                    scope="user.info.basic,video.upload",
+                    expires_at=now() + 3600,
+                )
+            ),
+        )
+        session.add(test_account)
+        session.commit()
+        test_account_id = test_account.id
+    scopes = request("GET", "/tiktok/accounts")[0]
+    assert scopes["scopes"] == ["user.info.basic", "video.upload"] and "tokens" not in scopes
+    try:
+        request("GET", f"/tiktok/accounts/{test_account_id}/creator")
+    except RuntimeError as error:
+        assert "video.publish" in str(error) and "Подключить" in str(error)
+    else:
+        raise AssertionError("Direct Post must require video.publish")
+
     app = Application()
     app.withdraw()
     errors = []
@@ -263,6 +293,17 @@ def run(report_path):
                 assert editor.result_photo is not None
                 editor.save()
                 assert app.page.webcam.options()["webcam_region"] == webcam_region
+            if name == "TikTok":
+                app.page.mode.set("Прямая публикация")
+                assert not app.pending and not app.page.creator_ready
+                assert "video.publish" in app.page.creator_label.cget("text")
+            if name == "Эфиры":
+                panel = app.page.tiktok_auto
+                assert panel.options() == {"enabled": False}
+                panel.enabled.set(True)
+                assert not app.pending and not panel.ready
+                assert "video.publish" in panel.creator_label.cget("text")
+                panel.enabled.set(False)
         Path(report_path).write_text(
             json.dumps(
                 dict(
@@ -274,6 +315,8 @@ def run(report_path):
                     split_clip=split_metadata,
                     webcam_clip=webcam_metadata,
                     webcam_editor=True,
+                    tiktok_permissions=True,
+                    tiktok_auto_panel=True,
                     ads_preview=True,
                     ad_copy=True,
                     downloader_version=yt_dlp.version.__version__,

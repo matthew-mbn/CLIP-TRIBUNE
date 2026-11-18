@@ -99,6 +99,25 @@ class DownloadInput(RemoteInput):
     height: Literal[720, 1080] = 1080
 
 
+class TikTokAutoInput(BaseModel):
+    """Явное разрешение пользователя на будущие клипы только одной записи."""
+
+    enabled: bool = False
+    account_id: str = ""
+    privacy_level: str = ""
+    caption_template: str = Field(default="{title}", max_length=1500)
+    interval_minutes: int = Field(default=30, ge=10, le=1440)
+    max_posts: int = Field(default=5, ge=1, le=15)
+    allow_comment: bool = False
+    allow_duet: bool = False
+    allow_stitch: bool = False
+    commercial: bool = False
+    brand_organic: bool = False
+    brand_content: bool = False
+    synthetic: bool = False
+    consent: bool = False
+
+
 class LiveInput(RemoteInput, FrameLayout):
     """Запись всегда запускается явным действием пользователя и имеет пределы."""
 
@@ -116,6 +135,23 @@ class LiveInput(RemoteInput, FrameLayout):
     subtitles: bool = False
     use_ads: bool = False
     theme: str = Field(default="", max_length=150)
+
+    tiktok_auto: TikTokAutoInput = Field(default_factory=TikTokAutoInput)
+
+    @model_validator(mode="after")
+    def auto_post_requires_setup(self):
+        if self.tiktok_auto.enabled:
+            if not self.auto_clip:
+                raise ValueError("Для автопубликации включите автоматические нарезки")
+            if (
+                not self.tiktok_auto.account_id
+                or not self.tiktok_auto.privacy_level
+                or not self.tiktok_auto.consent
+            ):
+                raise ValueError(
+                    "Для автопубликации выберите аккаунт, видимость и разрешите отправку будущих клипов"
+                )
+        return self
 
 
 class PublishInput(BaseModel):
@@ -147,6 +183,12 @@ class TikTokPublishInput(BaseModel):
     brand_content: bool = False
     synthetic: bool = False
     consent: bool = False
+
+    @model_validator(mode="after")
+    def caption_length(self):
+        if len(self.title.encode("utf-16-le", errors="surrogatepass")) // 2 > 2200:
+            raise ValueError("Описание TikTok превышает 2200 единиц UTF-16; эмодзи могут занимать две")
+        return self
 
 
 class SettingsInput(BaseModel):

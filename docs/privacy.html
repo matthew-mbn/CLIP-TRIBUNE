@@ -28,7 +28,11 @@
     errors and diagnostic logs. It also stores the account and API data described below.</p>
     <p>Live recording stores the stream URL, title, recording times and local media segments.
     Automatic clipping analyzes completed segments on your computer and retains generated clips.
-    The recorded parts remain until you delete them. Starting a recording does not publish its clips.</p>
+    The recorded parts remain until you delete them. Clips are not published by default.
+    If you explicitly enable an experimental automatic TikTok series before recording, the app
+    stores your account selection, visibility, caption template, interval, limit and authorization.
+    It sends future generated clips and these settings to TikTok without asking for each clip.
+    An enabled series may resume after restarting the app; stop the series to revoke further sending.</p>
     <p>The Windows EXE normally uses <code>%LOCALAPPDATA%\CLIP TRIBUNE\storage</code>.
     Running from source normally uses the project's <code>storage</code> folder. Advanced settings
     can change the storage or database location. Files and history remain until you remove them;

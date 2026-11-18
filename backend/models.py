@@ -200,6 +200,7 @@ class LiveRecording(Entity, Base):
     active_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
     options: Mapped[dict] = mapped_column(JSON, default=dict)
     clipping_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    auto_tiktok_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     started_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     updated_at: Mapped[float] = mapped_column(Float, default=now)

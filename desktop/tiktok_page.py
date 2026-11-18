@@ -26,6 +26,7 @@ class TikTokPage(Page):
     def __init__(self, parent, app):
         super().__init__(parent, app)
         self.account_ids, self.clip_ids, self.rows = {}, {}, {}
+        self.account_access = {}
         self.creator_ready = False
         columns = ctk.CTkFrame(self, fg_color="transparent")
         columns.pack(fill="x", pady=(6, 14))
@@ -157,11 +158,23 @@ class TikTokPage(Page):
         self.call("GET", "/tiktok/jobs", callback=self.jobs_loaded, quiet=quiet)
 
     def accounts_loaded(self, rows):
+        selected = self.account_ids.get(self.account.get())
+        previous = self.account_access.get(selected)
+        self.account_access = {r["id"]: (tuple(r.get("scopes", [])), r.get("expires_at", 0)) for r in rows}
         self.account_ids = {f"{r['name']} · {r['id'][:6]}": r["id"] for r in rows}
         choices = list(self.account_ids) or ["Не подключён"]
         self.account_box.configure(values=choices)
         if self.account.get() not in choices:
             self.account.set(choices[0])
+        elif previous != self.account_access.get(selected):
+            # После OAuth аккаунт может сохранить имя и id, но получить новые права.
+            # Обычный автоопрос с теми же данными не сбрасывает форму пользователя.
+            self.load_creator()
+        self.validate_form()
+
+    def has_scope(self, scope):
+        identity = self.account_ids.get(self.account.get())
+        return scope in self.account_access.get(identity, ((), 0))[0]
 
     def clips_loaded(self, rows):
         self.clip_ids = {f"{r['title'][:40]} · {r['id'][:6]}": r for r in rows}
@@ -217,19 +230,35 @@ class TikTokPage(Page):
 
     def load_creator(self):
         self.creator_ready = False
+        self.consent.set(False)
         self.privacy.set("Выберите видимость")
         self.privacy_box.configure(values=["Выберите видимость"])
         identity = self.account_ids.get(self.account.get())
+        revision = self.account_access.get(identity)
+        direct = MODES[self.mode.get()] == "direct"
+        required_scope = "video.publish" if direct else "video.upload"
         for name in ("comment", "duet", "stitch"):
             self.options["allow_" + name].set(False)
             self.switches["allow_" + name].configure(state="disabled")
-        self.creator_label.configure(
-            text="Прямая публикация требует разрешения video.publish\nи соблюдения ограничений TikTok."
-        )
-        if identity and MODES[self.mode.get()] == "direct":
+        if not identity:
+            label = "Выберите способ отправки и подключите аккаунт TikTok."
+        elif not self.has_scope(required_scope):
+            label = f"Для этого режима не выдано {required_scope}.\nНажмите «Подключить» и разрешите доступ в браузере."
+        else:
+            label = (
+                "Получаем параметры прямой публикации…"
+                if direct
+                else "Разрешение на отправку черновиков получено."
+            )
+        self.creator_label.configure(text=label)
+        if identity and direct and self.has_scope(required_scope):
 
             def loaded(info):
-                if identity != self.account_ids.get(self.account.get()) or MODES[self.mode.get()] != "direct":
+                if (
+                    identity != self.account_ids.get(self.account.get())
+                    or MODES[self.mode.get()] != "direct"
+                    or revision != self.account_access.get(identity)
+                ):
                     return
                 self.creator_ready = True
                 self.creator_label.configure(
@@ -257,6 +286,7 @@ class TikTokPage(Page):
         ready = bool(
             self.consent.get() and self.account.get() in self.account_ids and self.clip.get() in self.clip_ids
         )
+        ready = ready and self.has_scope("video.publish" if direct else "video.upload")
         notice = "Отправляя видео, вы принимаете Music Usage Confirmation TikTok."
         if direct:
             ready = ready and self.creator_ready and self.privacy.get() in PRIVACY.values()

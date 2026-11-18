@@ -97,6 +97,35 @@ def test_refresh_rotation_saved(session, account, monkeypatch):
     assert decrypt(account.tokens)["refresh_token"] == "r2"
 
 
+def test_inbox_account_does_not_query_direct_post_api(client, session, account, monkeypatch):
+    tokens = decrypt(account.tokens)
+    tokens["scope"] = "user.info.basic,video.upload"
+    account.tokens = encrypt(tokens)
+    session.commit()
+    calls = []
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: calls.append(a) or ok(CREATOR))
+    response = client.get(f"/api/tiktok/accounts/{account.id}/creator")
+    assert response.status_code == 400
+    assert "video.publish" in response.json()["detail"]
+    assert "Подключить" in response.json()["detail"]
+    assert not calls
+    result = client.get("/api/tiktok/accounts").json()[0]
+    assert result["scopes"] == ["user.info.basic", "video.upload"]
+    assert result["expires_at"] == tokens["expires_at"]
+    assert not {"tokens", "access_token", "refresh_token"} & result.keys()
+
+
+def test_remote_scope_revocation_explains_reconnection(client, account, monkeypatch):
+    monkeypatch.setattr(
+        httpx, "post", lambda *a, **k: httpx.Response(401, json={"error": {"code": "scope_not_authorized"}})
+    )
+    response = client.get(f"/api/tiktok/accounts/{account.id}/creator")
+    assert response.status_code == 400
+    assert "video.publish" in response.json()["detail"]
+    assert "Подключить" in response.json()["detail"]
+    assert "Sandbox" in response.json()["detail"]
+
+
 def test_direct_validation_and_consent(client, account, clip, monkeypatch):
     monkeypatch.setattr(tiktok, "creator_info", lambda *a: CREATOR)
     data = dict(clip_id=clip.id, account_id=account.id, mode="direct", consent=False)

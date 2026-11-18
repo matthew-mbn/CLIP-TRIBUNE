@@ -1,11 +1,12 @@
 """Официальный TikTok API: Desktop OAuth, черновики и Direct Post.
 
-Каждая отправка требует решения пользователя. Передачу файла и обработку TikTok
+Отправка разрешается для одного ролика или явно включённой серии эфира. Передачу файла и обработку TikTok
 считаем разными стадиями: HTTP 201 ещё не означает, что ролик опубликован.
 """
 
 import hashlib
 import secrets
+import re
 from urllib.parse import urlencode, urlparse
 
 import httpx
@@ -20,7 +21,30 @@ API = "https://open.tiktokapis.com/v2"
 REDIRECT = "http://127.0.0.1:8765/api/tiktok/callback"
 
 
-def decoded(response, token_response=False):
+def scope_help(scope=""):
+    mode = {"video.publish": "Прямая публикация", "video.upload": "Черновик в TikTok"}.get(scope)
+    if mode:
+        return (
+            f"TikTok не разрешил режим «{mode}»: требуется {scope}. "
+            "Выберите этот способ отправки, нажмите «Подключить» и разрешите доступ в браузере. "
+            "Если разрешение недоступно, проверьте Products / Scopes именно вашего Sandbox или Production."
+        )
+    return "TikTok не выдал нужное разрешение. Выберите способ отправки и нажмите «Подключить» для обновления доступа."
+
+
+def account_access(account):
+    """UI получает только права и срок токена; сами секреты остаются зашифрованными."""
+    tokens = decrypt(account.tokens) if account.tokens else {}
+    scopes = str(tokens.get("scope", "")).replace(",", " ").split()
+    return dict(scopes=sorted(set(scopes)), expires_at=tokens.get("expires_at", 0))
+
+
+def require_scope(account, scope):
+    if scope not in account_access(account)["scopes"]:
+        raise ValueError(scope_help(scope))
+
+
+def decoded(response, token_response=False, required_scope=""):
     """Не возвращаем пользователю URL с токенами или сырое тело сетевой ошибки."""
     try:
         data = response.json()
@@ -28,8 +52,23 @@ def decoded(response, token_response=False):
         raise RuntimeError(f"TikTok: некорректный ответ (HTTP {response.status_code})") from None
     error = data.get("error", {})
     code = error.get("code", "ok") if isinstance(error, dict) else error
+    if code == "scope_not_authorized":
+        raise ValueError(scope_help(required_scope))
     if response.is_error or code not in (None, "", "ok"):
-        raise RuntimeError(f"TikTok: {code or 'ошибка запроса'} (HTTP {response.status_code})")
+        # Не теряем причину invalid_params, но убираем ссылки и секреты.
+        detail = str(error.get("message", "")) if isinstance(error, dict) else ""
+        detail = re.sub(r"https?://\S+", "[URL]", detail)
+        detail = re.sub(
+            r"(?i)(access_token|refresh_token|client_secret|authorization)\s*[:=]\s*\S+",
+            r"\1=[скрыто]",
+            detail,
+        )
+        detail = re.sub(r"\b(?:act|rft)\.[\w.-]+", "[токен]", detail)
+        detail = " ".join(detail.split())[:400]
+        raise RuntimeError(
+            f"TikTok: {code or 'ошибка запроса'} (HTTP {response.status_code})"
+            + (f" · {detail}" if detail else "")
+        )
     return data if token_response else data.get("data", {})
 
 
@@ -124,7 +163,7 @@ def access_token(session, account):
     return tokens["access_token"]
 
 
-def post(session, account, endpoint, payload):
+def post(session, account, endpoint, payload, required_scope=""):
     try:
         response = httpx.post(
             API + endpoint,
@@ -132,13 +171,15 @@ def post(session, account, endpoint, payload):
             headers={"Authorization": "Bearer " + access_token(session, account)},
             timeout=45,
         )
-        return decoded(response)
+        return decoded(response, required_scope=required_scope)
     except httpx.RequestError:
         raise RuntimeError("Не удалось связаться с TikTok. Проверьте соединение и статус отправки.") from None
 
 
 def creator_info(session, account):
-    return post(session, account, "/post/publish/creator_info/query/", {})
+    # Подключение для черновиков не даёт video.publish автоматически.
+    require_scope(account, "video.publish")
+    return post(session, account, "/post/publish/creator_info/query/", {}, "video.publish")
 
 
 def disconnect(session, account):
@@ -181,7 +222,7 @@ def validate_direct(options, info, duration):
         raise ValueError("Реклама другого бренда не может иметь видимость «Только я»")
 
 
-def enqueue(session, request):
+def enqueue(session, request, creator=None, auto_live_id=None):
     if not request.consent:
         raise ValueError("Подтвердите отправку и условия TikTok")
     clip, account = session.get(RenderedClip, request.clip_id), session.get(TikTokAccount, request.account_id)
@@ -190,8 +231,7 @@ def enqueue(session, request):
     if not inside(clip.path).is_file():
         raise ValueError("Файл ролика не найден")
     required_scope = "video.publish" if request.mode == "direct" else "video.upload"
-    if required_scope not in decrypt(account.tokens).get("scope", "").split(","):
-        raise ValueError("Переподключите TikTok с разрешением для выбранного способа отправки")
+    require_scope(account, required_scope)
     if session.scalar(
         select(TikTokJob).where(TikTokJob.clip_id == clip.id, TikTokJob.account_id == account.id)
     ):
@@ -199,8 +239,12 @@ def enqueue(session, request):
             "Этот ролик уже есть в истории TikTok. Проверьте его статус перед повторной отправкой"
         )
     options = request.model_dump()
+    if auto_live_id:
+        options["auto_live_id"] = auto_live_id
     if request.mode == "direct":
-        validate_direct(options, creator_info(session, account), clip.duration)
+        validate_direct(
+            options, creator if creator is not None else creator_info(session, account), clip.duration
+        )
     job = TikTokJob(clip_id=clip.id, account_id=account.id, mode=request.mode, options=options)
     session.add(job)
     session.commit()
@@ -241,7 +285,13 @@ def upload(session, job):
         )
         endpoint = "/post/publish/video/init/"
     # После init не повторяем создание поста автоматически: это могло бы создать дубль.
-    data = post(session, account, endpoint, payload)
+    required_scope = "video.publish" if job.mode == "direct" else "video.upload"
+    require_scope(account, required_scope)
+    # Проверяем отмену ещё раз после запроса параметров автора: он мог занять время.
+    session.refresh(job)
+    if job.status == "cancelled":
+        return
+    data = post(session, account, endpoint, payload, required_scope)
     job.publish_id, job.upload_url = data["publish_id"], encrypt(data["upload_url"])
     session.commit()
     parsed = urlparse(data["upload_url"])
@@ -310,6 +360,9 @@ def check_status(session, job):
         job.status, job.progress, job.error = "inbox", 100, None
     elif remote == "FAILED":
         job.status, job.error = "failed", data.get("fail_reason", "TikTok не обработал видео")
+        from .tiktok_auto import pause_failed
+
+        pause_failed(session, job, job.error)
     job.updated_at = now()
     session.commit()
     return job
@@ -317,6 +370,9 @@ def check_status(session, job):
 
 def tick():
     """Один последовательный отправитель, а опрос обработки ограничен по частоте."""
+    from .tiktok_auto import queue_once, pause_failed, claim_allowed
+
+    queue_once()
     with Session() as session:
         # После аварийного закрытия неопределённый результат требует проверки, не повторной загрузки.
         session.execute(
@@ -329,6 +385,8 @@ def tick():
             select(TikTokJob).where(TikTokJob.status == "pending").order_by(TikTokJob.created_at)
         )
         if job:
+            if not claim_allowed(session, job):
+                return
             claimed = session.execute(
                 update(TikTokJob)
                 .where(TikTokJob.id == job.id, TikTokJob.status == "pending")
@@ -343,6 +401,7 @@ def tick():
                     session.refresh(job)
                     if job.status != "cancelled":
                         job.status, job.error = "interrupted" if job.publish_id else "failed", str(error)
+                        pause_failed(session, job, str(error))
                         session.commit()
         waiting = session.scalar(
             select(TikTokJob)
@@ -354,4 +413,5 @@ def tick():
                 check_status(session, waiting)
             except Exception as error:
                 waiting.updated_at, waiting.error = now(), str(error)
+                pause_failed(session, waiting, str(error))
                 session.commit()

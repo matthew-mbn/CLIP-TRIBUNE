@@ -25,7 +25,8 @@ def required(session, model, identity):
 def accounts():
     with Session() as session:
         return [
-            public(row) for row in session.scalars(select(TikTokAccount).where(TikTokAccount.tokens != ""))
+            {**public(row), **tiktok.account_access(row)}
+            for row in session.scalars(select(TikTokAccount).where(TikTokAccount.tokens != ""))
         ]
 
 
