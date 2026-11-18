@@ -123,9 +123,9 @@ def resolve_stream(url, height):
     return str(info.get("title") or "Прямой эфир")[:220], streams
 
 
-def capture_command(streams, folder, attempt, seconds):
-    """Список аргументов, а не shell-команда. Имена выходных файлов задаём сами."""
-    command = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y"]
+def stream_inputs(streams):
+    """Сетевые параметры общие для записи и одного кадра предпросмотра."""
+    command = []
     proxies = getproxies()
     proxy = proxies.get("https") or proxies.get("http")
     for stream in streams:
@@ -149,6 +149,12 @@ def capture_command(streams, folder, attempt, seconds):
             if value and not any(c in value for c in "\r\n"):
                 command += [option, value[:2048]]
         command += ["-i", stream["url"]]
+    return command
+
+
+def capture_command(streams, folder, attempt, seconds):
+    """Список аргументов, а не shell-команда. Имена выходных файлов задаём сами."""
+    command = [FFMPEG, "-hide_banner", "-loglevel", "error", "-y"] + stream_inputs(streams)
     video_index = next(i for i, item in enumerate(streams) if item["video"])
     audio_index = next((i for i, item in enumerate(streams) if item["audio"]), None)
     command += ["-map", f"{video_index}:v:0"]

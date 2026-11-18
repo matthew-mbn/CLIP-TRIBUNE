@@ -27,7 +27,30 @@ def build(options, metadata, width, height, duration):
     audio_inputs = [0] if metadata.get("audio") else []
     next_input = 1
     split = options.get("layout") == "split"
-    if split:
+    if options.get("layout") == "webcam":
+        from .schemas import WebcamRegion
+
+        region = WebcamRegion.model_validate(options.get("webcam_region")).model_dump()
+        top_height = (height // 2) // 2 * 2
+        # Два ответвления одного видеопотока имеют одинаковые кадры и время.
+        # Координаты относительные: FFmpeg пересчитает их при смене размера потока.
+        crop = (
+            f"crop=w='max(2,trunc(iw*{region['width']}/2)*2)':"
+            f"h='max(2,trunc(ih*{region['height']}/2)*2)':"
+            f"x='min(iw-ow,trunc(iw*{region['x']}/2)*2)':"
+            f"y='min(ih-oh,trunc(ih*{region['y']}/2)*2)'"
+        )
+        graph += [
+            f"[0:v]trim=duration={duration},setpts=PTS-STARTPTS,fps=30,split[game][camera]",
+            "[game]" + fit_filter(width, top_height, options.get("main_fit", "crop")) + "[top]",
+            "[camera]"
+            + crop
+            + ","
+            + fit_filter(width, height - top_height, options.get("webcam_fit", "crop"))
+            + "[bottom]",
+            "[top][bottom]vstack=inputs=2:shortest=1[base]",
+        ]
+    elif split:
         secondary = options["split_source"]
         inputs += media_input(
             secondary["path"],

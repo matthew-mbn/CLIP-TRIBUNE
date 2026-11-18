@@ -182,6 +182,8 @@ class StudioPage(Page):
     subtitle = "Выберите исходники и настройте монтаж. Ctrl + клик позволяет выбрать несколько видео."
 
     def __init__(self, parent, app):
+        from .webcam import WebcamPanel
+
         super().__init__(parent, app)
         self.preselected = None
         layout = ctk.CTkFrame(self, fg_color="transparent")
@@ -206,7 +208,11 @@ class StudioPage(Page):
         ctk.CTkFrame(source_body, height=1, fg_color=theme.LINE).pack(fill="x", pady=18)
         theme.text(source_body, "Два видео в одном кадре", font=("Segoe UI", 16, "bold"))
         self.layout_mode = theme.field(
-            source_body, "Экран", "Один ролик", ["Один ролик", "Два ролика: верх / низ"], stacked=True
+            source_body,
+            "Экран",
+            "Один ролик",
+            ["Один ролик", "Два ролика: верх / низ", "Видео + вебка · 50/50"],
+            stacked=True,
         )
         self.split_panel = ctk.CTkFrame(source_body, fg_color="transparent")
         self.secondary = theme.field(
@@ -247,6 +253,7 @@ class StudioPage(Page):
             font=("Segoe UI", 11),
         )
         # Панель появляется на своём месте; прочие настройки остаются доступны.
+        self.webcam = WebcamPanel(source_body, self, self.webcam_source)
         self.split_anchor = ctk.CTkFrame(source_body, height=1, fg_color=theme.LINE)
         self.split_anchor.pack(fill="x", pady=12)
         self.layout_mode.trace_add("write", lambda *_: self.change_layout())
@@ -366,12 +373,20 @@ class StudioPage(Page):
         )
 
     def change_layout(self):
+        self.split_panel.pack_forget()
+        self.webcam.pack_forget()
         if self.layout_mode.get() == "Один ролик":
-            self.split_panel.pack_forget()
             self.framing_widget.configure(state="readonly")
         else:
-            self.split_panel.pack(fill="x", before=self.split_anchor)
+            panel = self.webcam if self.layout_mode.get() == "Видео + вебка · 50/50" else self.split_panel
+            panel.pack(fill="x", before=self.split_anchor)
             self.framing_widget.configure(state="disabled")
+
+    def webcam_source(self):
+        selected = self.tree.selection()
+        if len(selected) != 1:
+            raise ValueError("Для вебки выберите один исходник в таблице")
+        return dict(asset_id=selected[0])
 
     def refresh(self, quiet=False):
         self.call("GET", "/sources", callback=self.loaded, quiet=quiet)
@@ -402,11 +417,12 @@ class StudioPage(Page):
     def create(self):
         selected = self.selected(self.tree)
         if selected:
-            split = self.layout_mode.get() != "Один ролик"
+            split = self.layout_mode.get() == "Два ролика: верх / низ"
             try:
                 offset = float(self.secondary_start.get().replace(",", ".")) if split else 0
-            except ValueError:
-                messagebox.showerror("Студия", "Укажите начало нижнего ролика числом секунд.", parent=self)
+                webcam = self.webcam.options() if self.layout_mode.get() == "Видео + вебка · 50/50" else {}
+            except ValueError as error:
+                messagebox.showerror("Студия", str(error), parent=self)
                 return
             data = dict(
                 asset_ids=selected,
@@ -431,6 +447,7 @@ class StudioPage(Page):
                     "Без звука": "mute",
                 }[self.split_audio.get()],
             )
+            data.update(webcam)
             self.call("POST", "/jobs", data, lambda _: self.resume_and_open())
 
     def resume_and_open(self):

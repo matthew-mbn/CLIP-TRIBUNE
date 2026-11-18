@@ -8,6 +8,7 @@ import customtkinter as ctk
 from . import theme
 from .ads_page import card
 from .base import Page, date
+from .webcam import WebcamPanel
 
 STATUSES = {
     "pending": "Ожидание",
@@ -20,7 +21,12 @@ STATUSES = {
     "failed": "Ошибка",
     "interrupted": "Прервано",
 }
-FRAMING = {"Размытый фон": "blur", "Обрезать в вертикаль": "crop", "Исходные пропорции": "original"}
+FRAMING = {
+    "Размытый фон": "blur",
+    "Обрезать в вертикаль": "crop",
+    "Исходные пропорции": "original",
+    "Видео + вебка · 50/50": "webcam",
+}
 
 
 def duration(value):
@@ -95,6 +101,10 @@ class LivePage(Page):
         self.framing = theme.field(
             clips, "Кадрирование", "Размытый фон", list(FRAMING), stacked=True, width=26
         )
+        self.webcam = WebcamPanel(clips, self, self.webcam_source)
+        self.webcam_anchor = ctk.CTkFrame(clips, fg_color="transparent", height=1)
+        self.webcam_anchor.pack(fill="x")
+        self.framing.trace_add("write", lambda *_: self.webcam_layout())
         theme.text(
             clips,
             "Отбор по динамике кадра и звуку. Выше порог — меньше клипов. Смысл момента проверьте перед публикацией.",
@@ -190,6 +200,19 @@ class LivePage(Page):
             row = self.rows[selected[0]]
             self.info.configure(text=(row["error"] or row["message"]) + "\n" + row["url"])
 
+    def webcam_source(self):
+        if not self.url.get().strip():
+            raise ValueError("Сначала вставьте ссылку на эфир")
+        if not self.rights.get():
+            raise ValueError("Подтвердите право на запись и использование эфира")
+        return dict(url=self.url.get().strip(), rights=True, height=int(self.height.get()))
+
+    def webcam_layout(self):
+        if FRAMING[self.framing.get()] == "webcam":
+            self.webcam.pack(fill="x", before=self.webcam_anchor)
+        else:
+            self.webcam.pack_forget()
+
     def start(self):
         try:
             data = dict(
@@ -203,16 +226,16 @@ class LivePage(Page):
                 duration=int(self.length.get()),
                 count=int(self.count.get()),
                 min_score=int(self.score.get()),
-                framing=FRAMING[self.framing.get()],
+                framing=FRAMING[self.framing.get()] if FRAMING[self.framing.get()] != "webcam" else "blur",
                 resolution=self.height.get(),
                 theme=self.subject.get().strip(),
                 subtitles=self.subtitles.get(),
                 use_ads=self.ads.get(),
             )
-        except ValueError:
-            messagebox.showerror(
-                "Параметры записи", "Проверьте числа в лимитах и пороге отбора.", parent=self
-            )
+            if FRAMING[self.framing.get()] == "webcam":
+                data.update(self.webcam.options())
+        except ValueError as error:
+            messagebox.showerror("Параметры записи", str(error), parent=self)
             return
         self.call("POST", "/live", data, callback=self.started)
 

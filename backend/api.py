@@ -41,6 +41,7 @@ from .video import run
 from .tiktok_routes import router as tiktok_router
 from .ads_routes import router as ads_router
 from .live_routes import router as live_router
+from .webcam_routes import router as webcam_router
 
 token_path = STORAGE / ".api-token"
 if not token_path.exists():
@@ -52,12 +53,13 @@ if not token_path.exists():
 LOCAL_TOKEN = token_path.read_text(encoding="utf-8")
 
 app = FastAPI(
-    title="CLIP TRIBUNE", version="0.4.0", description="Локальная студия автоматического видеомонтажа"
+    title="CLIP TRIBUNE", version="0.5.0", description="Локальная студия автоматического видеомонтажа"
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 app.include_router(tiktok_router)
 app.include_router(ads_router)
 app.include_router(live_router)
+app.include_router(webcam_router)
 
 
 @app.middleware("http")

@@ -1,5 +1,47 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+class WebcamRegion(BaseModel):
+    """Доли исходного кадра: область сохраняется при смене 1080p на 720p."""
+
+    x: float = Field(ge=0, lt=1, allow_inf_nan=False)
+    y: float = Field(ge=0, lt=1, allow_inf_nan=False)
+    width: float = Field(ge=0.02, le=1, allow_inf_nan=False)
+    height: float = Field(ge=0.02, le=1, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def inside_frame(self):
+        if self.x + self.width > 1.000001 or self.y + self.height > 1.000001:
+            raise ValueError("Область вебки должна находиться внутри кадра")
+        return self
+
+
+class FrameLayout(BaseModel):
+    layout: Literal["single", "split", "webcam"] = "single"
+    webcam_region: WebcamRegion | None = None
+    webcam_fit: Literal["crop", "fit"] = "crop"
+    main_fit: Literal["crop", "fit"] = "crop"
+
+    @model_validator(mode="after")
+    def webcam_selected(self):
+        if self.layout == "webcam" and self.webcam_region is None:
+            raise ValueError("Сначала выделите область вебки на предпросмотре")
+        return self
+
+
+class WebcamFrameInput(BaseModel):
+    asset_id: str | None = None
+    url: str = Field(default="", max_length=4096)
+    rights: bool = False
+    height: Literal[720, 1080] = 720
+    second: float = Field(default=0, ge=0, le=28800, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def one_source(self):
+        if bool(self.asset_id) == bool(self.url.strip()):
+            raise ValueError("Выберите один исходник или ссылку на эфир")
+        return self
 
 
 class AdOptions(BaseModel):
@@ -20,7 +62,7 @@ class AdOptions(BaseModel):
     blend: float = Field(default=0.08, ge=0, le=0.5, allow_inf_nan=False)
 
 
-class RenderOptions(BaseModel):
+class RenderOptions(FrameLayout):
     asset_ids: list[str] = Field(default_factory=list, max_length=100)
     theme: str = Field(default="", max_length=150)
     count: int = Field(default=3, ge=1, le=30)
@@ -35,7 +77,6 @@ class RenderOptions(BaseModel):
     min_score: int = Field(default=0, ge=0, le=100)
     project_id: str | None = None
     use_ads: bool = True
-    layout: Literal["single", "split"] = "single"
     secondary_asset_id: str | None = None
     secondary_start: float = Field(default=0, ge=0, le=28800, allow_inf_nan=False)
     secondary_loop: bool = True
@@ -58,10 +99,11 @@ class DownloadInput(RemoteInput):
     height: Literal[720, 1080] = 1080
 
 
-class LiveInput(RemoteInput):
+class LiveInput(RemoteInput, FrameLayout):
     """Запись всегда запускается явным действием пользователя и имеет пределы."""
 
     height: Literal[720, 1080] = 720
+    layout: Literal["single", "webcam"] = "single"
     max_hours: float = Field(default=4, ge=0.05, le=24, allow_inf_nan=False)
     max_gb: int = Field(default=20, ge=1, le=500)
     segment_seconds: Literal[60, 120, 180, 300] = 120

@@ -16,6 +16,8 @@ def create_jobs(session, options: RenderOptions):
         raise ValueError("Выберите существующие исходники")
     if any(not asset.rights for asset in assets):
         raise ValueError("Для каждого исходника необходимо подтверждение прав")
+    if options.layout == "webcam" and len(assets) != 1:
+        raise ValueError("Для режима с вебкой выберите один исходник и выделите его камеру")
     for asset in assets:
         active = session.scalar(
             select(RenderJob.id).where(

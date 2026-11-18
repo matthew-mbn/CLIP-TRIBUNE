@@ -141,6 +141,70 @@ def run(report_path):
     split_metadata = probe(split_location["path"])
     assert (split_metadata["width"], split_metadata["height"]) == (720, 1280)
     assert split_clip["metadata_json"]["render_options"]["ad_source"]["asset_id"] == advert["id"]
+    webcam_source = STORAGE / "temp" / "self-check-webcam.mp4"
+    run_media(
+        [
+            FFMPEG,
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=blue:s=640x360:r=30",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=44100",
+            "-vf",
+            "drawbox=x=480:y=240:w=160:h=120:color=red:t=fill",
+            "-t",
+            "16",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "2",
+            "-c:a",
+            "aac",
+            str(webcam_source),
+        ]
+    )
+    webcam_asset = request("POST", "/sources/local", dict(paths=[str(webcam_source)], rights=True))["assets"][
+        0
+    ]
+    webcam_frame = request("POST", "/webcam/frame", dict(asset_id=webcam_asset["id"]))
+    assert webcam_frame["width"] == 640 and len(webcam_frame["png"]) > 100
+    webcam_region = dict(x=0.75, y=2 / 3, width=0.25, height=1 / 3)
+    webcam_job = request(
+        "POST",
+        "/jobs",
+        dict(
+            asset_ids=[webcam_asset["id"]],
+            layout="webcam",
+            webcam_region=webcam_region,
+            count=1,
+            duration=15,
+            resolution="720",
+        ),
+    )[0]
+    wait_job(webcam_job["id"])
+    webcam_clip = next(c for c in request("GET", "/clips") if c["job_id"] == webcam_job["id"])
+    webcam_path = request("GET", f"/clips/{webcam_clip['id']}/location")["path"]
+    webcam_metadata = probe(webcam_path)
+    assert (webcam_metadata["width"], webcam_metadata["height"], webcam_metadata["audio"]) == (
+        720,
+        1280,
+        True,
+    )
+    check_frame = STORAGE / "temp" / "self-check-webcam-result.png"
+    run_media([FFMPEG, "-v", "error", "-y", "-i", webcam_path, "-frames:v", "1", str(check_frame)])
+    with Image.open(check_frame) as picture:
+        upper_pixel, lower_pixel = (
+            picture.convert("RGB").getpixel((360, 300)),
+            picture.convert("RGB").getpixel((360, 960)),
+        )
+    assert upper_pixel[2] > 220 and upper_pixel[0] < 35
+    assert lower_pixel[0] > 220 and lower_pixel[2] < 35
     network_downloads = []
     live_check = None
     if live_url := os.getenv("CLIP_TRIBUNE_CHECK_LIVE_URL"):
@@ -186,6 +250,19 @@ def run(report_path):
             if name == "Студия":
                 app.page.layout_mode.set("Два ролика: верх / низ")
                 assert app.page.split_panel.winfo_manager() == "pack"
+                app.page.tree.selection_set(webcam_asset["id"])
+                app.page.layout_mode.set("Видео + вебка · 50/50")
+                app.page.webcam.load()
+                deadline = time.monotonic() + 30
+                app.after(30, check)
+                tk.Tk.mainloop(app)
+                editor = app.page.webcam.editor
+                assert editor is not None
+                editor.region = webcam_region
+                editor.draw()
+                assert editor.result_photo is not None
+                editor.save()
+                assert app.page.webcam.options()["webcam_region"] == webcam_region
         Path(report_path).write_text(
             json.dumps(
                 dict(
@@ -195,6 +272,8 @@ def run(report_path):
                     rendered_clip=metadata,
                     clip_path=location["path"],
                     split_clip=split_metadata,
+                    webcam_clip=webcam_metadata,
+                    webcam_editor=True,
                     ads_preview=True,
                     ad_copy=True,
                     downloader_version=yt_dlp.version.__version__,
