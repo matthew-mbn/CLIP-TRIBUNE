@@ -52,6 +52,8 @@ class QueuePage(Page):
             "import_remote": "Импорт",
             "download": "Скачивание",
             "ad_overlay": "Реклама",
+            "live_clip": "Момент эфира",
+            "live_export": "Сборка эфира",
         }
         theme.replace_rows(
             self.tree,

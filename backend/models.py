@@ -186,3 +186,38 @@ class TikTokJob(Entity, Base):
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     result: Mapped[dict] = mapped_column(JSON, default=dict)
     updated_at: Mapped[float] = mapped_column(Float, default=now)
+
+
+class LiveRecording(Entity, Base):
+    """Одна запись эфира. NULL в active_slot освобождает место для следующей."""
+
+    __tablename__ = "live_recordings"
+    __table_args__ = (Index("uq_live_active_slot", "active_slot", unique=True),)
+    url: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text, default="Прямой эфир")
+    platform: Mapped[str] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(24), default="pending")
+    active_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    options: Mapped[dict] = mapped_column(JSON, default=dict)
+    clipping_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    started_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    updated_at: Mapped[float] = mapped_column(Float, default=now)
+    seconds: Mapped[float] = mapped_column(Float, default=0)
+    bytes: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[str] = mapped_column(Text, default="Ожидание записи")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class LiveSegment(Entity, Base):
+    """Закрытая часть эфира: только такие файлы можно передавать монтажному воркеру."""
+
+    __tablename__ = "live_segments"
+    __table_args__ = (Index("uq_live_segment", "recording_id", "name", unique=True),)
+    recording_id: Mapped[str] = mapped_column(ForeignKey("live_recordings.id"))
+    name: Mapped[str] = mapped_column(Text)
+    path: Mapped[str] = mapped_column(Text)
+    start: Mapped[float] = mapped_column(Float)
+    duration: Mapped[float] = mapped_column(Float)
+    size: Mapped[int] = mapped_column(Integer)
+    job_id: Mapped[str | None] = mapped_column(ForeignKey("render_jobs.id"), nullable=True)

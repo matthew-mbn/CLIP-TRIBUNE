@@ -85,6 +85,13 @@ def process_job(job_id):
                     asset.name = title + target.suffix
                     session.commit()
                 job.message = "Скачано: " + asset.name + ". Видео доступно в разделе «Источники»."
+            elif job.kind in ("live_clip", "live_export"):
+                from .live_clips import process as process_live, export as export_live
+
+                if job.kind == "live_clip":
+                    process_live(session, job, options, cancelled)
+                else:
+                    export_live(session, job, cancelled)
             elif job.kind == "import_remote":
                 target = STORAGE / "temp" / (uid() + remote_suffix(job.options["url"]))
                 try:
@@ -251,14 +258,25 @@ def process_job(job_id):
 
 
 def save_clip(
-    session, job, asset, candidate, output, selected, theme, warning="", transcript=(), source_clip=None
+    session,
+    job,
+    asset,
+    candidate,
+    output,
+    selected,
+    theme,
+    warning="",
+    transcript=(),
+    source_clip=None,
+    source_name=None,
+    metadata_extra=None,
 ):
     metadata = (
         dict(source_clip.metadata_json)
         if source_clip
         else content_metadata(
             theme,
-            asset.name if asset else "Оригинальная анимация",
+            asset.name if asset else (source_name or "Оригинальная анимация"),
             selected,
             " ".join(
                 s["text"]
@@ -276,6 +294,8 @@ def save_clip(
         start=selected["start"],
         render_options=job.options,
     )
+    if metadata_extra:
+        metadata.update(metadata_extra)
     thumb = output.with_suffix(".png")
     video.thumbnail(output, thumb)
     clip = RenderedClip(

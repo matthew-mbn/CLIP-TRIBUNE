@@ -183,7 +183,9 @@ def similarity(first, second):
     return 1 - sum(a != b for a, b in zip(first, second)) / max(len(first), len(second), 1)
 
 
-def select_candidates(features, duration, length, count, used=(), min_score=0, preset="Gaming Viral"):
+def select_candidates(
+    features, duration, length, count, used=(), min_score=0, preset="Gaming Viral", start_min=0
+):
     """Ранжируем окна, затем исключаем пересечения и почти одинаковые сцены."""
     if duration < length:
         raise ValueError(f"Исходник короче выбранной нарезки ({length} сек.)")
@@ -191,6 +193,8 @@ def select_candidates(features, duration, length, count, used=(), min_score=0, p
     starts.update(s for s in features["scenes"] if s + length <= duration)
     candidates = []
     for start in sorted(starts):
+        if start < start_min:
+            continue
         motion = features["motion"][start : start + length]
         audio = features["audio"][start : start + length]
         movement = min(1, statistics.mean(motion or [0]) / 0.15)

@@ -21,6 +21,17 @@ class SettingsPage(Page):
         self.variables = {}
         self.types = {}
         theme.button(self.toolbar(), "Сохранить настройки", self.save, True)
+        legal = self.toolbar()
+        theme.button(
+            legal,
+            "Условия использования",
+            lambda: webbrowser.open("https://matthew-mbn.github.io/CLIP-TRIBUNE/terms-ru.html"),
+        )
+        theme.button(
+            legal,
+            "Конфиденциальность и удаление данных",
+            lambda: webbrowser.open("https://matthew-mbn.github.io/CLIP-TRIBUNE/privacy-ru.html"),
+        )
         notebook = ctk.CTkTabview(
             self,
             fg_color=theme.PANEL,

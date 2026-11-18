@@ -7,10 +7,12 @@ from .settings_page import SettingsPage
 from .source_pages import SourcesPage, StudioPage
 from .tiktok_page import TikTokPage
 from .ads_page import AdsPage
+from .live_page import LivePage
 
 PAGES = {
     "Обзор": DashboardPage,
     "Источники": SourcesPage,
+    "Эфиры": LivePage,
     "Тренды": TrendsPage,
     "Студия": StudioPage,
     "Реклама": AdsPage,

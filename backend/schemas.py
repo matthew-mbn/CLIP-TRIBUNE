@@ -58,6 +58,24 @@ class DownloadInput(RemoteInput):
     height: Literal[720, 1080] = 1080
 
 
+class LiveInput(RemoteInput):
+    """Запись всегда запускается явным действием пользователя и имеет пределы."""
+
+    height: Literal[720, 1080] = 720
+    max_hours: float = Field(default=4, ge=0.05, le=24, allow_inf_nan=False)
+    max_gb: int = Field(default=20, ge=1, le=500)
+    segment_seconds: Literal[60, 120, 180, 300] = 120
+    auto_clip: bool = True
+    duration: int = Field(default=30, ge=15, le=60)
+    count: int = Field(default=1, ge=1, le=3)
+    min_score: int = Field(default=25, ge=0, le=100)
+    resolution: Literal["720", "1080"] = "720"
+    framing: Literal["crop", "blur", "original"] = "blur"
+    subtitles: bool = False
+    use_ads: bool = False
+    theme: str = Field(default="", max_length=150)
+
+
 class PublishInput(BaseModel):
     clip_ids: list[str] = Field(min_length=1, max_length=100)
     channel_id: str | None = None

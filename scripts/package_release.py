@@ -1,6 +1,6 @@
 """Архив для пользователей: EXE, инструкция, фирменные ресурсы и лицензии.
 
-Запуск: python scripts/package_release.py dist/0.3.0
+Запуск: python scripts/package_release.py dist/0.4.0
 Видеоматериалы, база, .env и окружение разработчика сюда не попадают.
 """
 
@@ -27,6 +27,15 @@ def main():
             "assets/logo.svg",
             "docs/third-party-notices.txt",
             "docs/tiktok.md",
+            "docs/live-streams.md",
+            "docs/release-0.4.0.md",
+            "docs/terms-ru.html",
+            "docs/privacy-ru.html",
+            "docs/terms.html",
+            "docs/privacy.html",
+            "docs/index.html",
+            "docs/site.css",
+            "docs/site-assets/logo.svg",
             "docs/providers.md",
             "docs/learning-python.md",
             "docs/verification.md",

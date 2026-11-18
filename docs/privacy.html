@@ -26,6 +26,9 @@
     <p>The app stores imported or downloaded media, advertising assets you provide, rendered clips,
     thumbnails, subtitles, filenames and paths, editing settings, project and job history,
     errors and diagnostic logs. It also stores the account and API data described below.</p>
+    <p>Live recording stores the stream URL, title, recording times and local media segments.
+    Automatic clipping analyzes completed segments on your computer and retains generated clips.
+    The recorded parts remain until you delete them. Starting a recording does not publish its clips.</p>
     <p>The Windows EXE normally uses <code>%LOCALAPPDATA%\CLIP TRIBUNE\storage</code>.
     Running from source normally uses the project's <code>storage</code> folder. Advanced settings
     can change the storage or database location. Files and history remain until you remove them;
@@ -53,7 +56,8 @@
     your region, and <a href="https://legal.twitch.com/en/legal/privacy-notice/">Twitch Privacy Notice</a>.</p></section>
 <section id="providers"><h2>4. Optional speech and AI services</h2>
     <p>If you configure a speech service and enable subtitles, the app sends the source media file
-    to your configured speech endpoint to obtain a transcript. A cloud endpoint therefore receives
+    to your configured speech endpoint to obtain a transcript. For live clips, this can be a window
+    assembled from recorded segments. A cloud endpoint therefore receives
     that media; a service you run locally processes it at that local endpoint.</p>
     <p>If you configure an AI metadata endpoint and model, metadata generation sends the topic,
     selection evidence and available transcript to that endpoint. This request does not attach the

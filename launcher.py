@@ -78,6 +78,10 @@ def run_service(service):
         from backend.worker import main
 
         main()
+    elif service == "live":
+        from backend.live import main
+
+        main()
     else:
         raise ValueError("Неизвестная служба")
 
@@ -99,6 +103,7 @@ def main():
     migrate()
     api = start_process("api", "api.log")
     worker = None
+    live = None
     try:
         for _ in range(150):
             if api.poll() is not None:
@@ -111,7 +116,13 @@ def main():
         else:
             raise RuntimeError("Сервер не ответил за отведённое время")
         worker = start_process("worker", "worker.log")
-        processes = [psutil.Process(os.getpid()), psutil.Process(api.pid), psutil.Process(worker.pid)]
+        live = start_process("live", "live.log")
+        processes = [
+            psutil.Process(os.getpid()),
+            psutil.Process(api.pid),
+            psutil.Process(worker.pid),
+            psutil.Process(live.pid),
+        ]
         (STORAGE / "processes.json").write_text(
             json.dumps([dict(pid=p.pid, created=p.create_time()) for p in processes]), encoding="utf-8"
         )
@@ -129,9 +140,18 @@ def main():
             httpx.post(
                 BASE_URL + "/api/control/stop", headers={"X-Clip-Tribune": token}, timeout=3, trust_env=False
             )
-            time.sleep(1)
+            # Даём записи закрыть последний MKV, прежде чем останавливать службы.
+            for _ in range(20):
+                recordings = httpx.get(
+                    BASE_URL + "/api/live", headers={"X-Clip-Tribune": token}, timeout=2, trust_env=False
+                ).json()
+                if not any(item["active_slot"] is not None for item in recordings):
+                    break
+                time.sleep(0.5)
         except OSError, httpx.HTTPError:
             pass
+        if live:
+            stop_process(live)
         if worker:
             stop_process(worker)
         stop_process(api)

@@ -40,6 +40,7 @@ from .sources import import_file
 from .video import run
 from .tiktok_routes import router as tiktok_router
 from .ads_routes import router as ads_router
+from .live_routes import router as live_router
 
 token_path = STORAGE / ".api-token"
 if not token_path.exists():
@@ -51,11 +52,12 @@ if not token_path.exists():
 LOCAL_TOKEN = token_path.read_text(encoding="utf-8")
 
 app = FastAPI(
-    title="CLIP TRIBUNE", version="0.3.0", description="Локальная студия автоматического видеомонтажа"
+    title="CLIP TRIBUNE", version="0.4.0", description="Локальная студия автоматического видеомонтажа"
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 app.include_router(tiktok_router)
 app.include_router(ads_router)
+app.include_router(live_router)
 
 
 @app.middleware("http")
@@ -314,12 +316,18 @@ def download_source(request: DownloadInput):
         raise ValueError("Подтвердите, что у вас есть права на скачивание и монтаж материала")
     url = validate_url(request.url)
     with Session() as session:
-        active = session.scalars(select(RenderJob).where(
-            RenderJob.kind == "download", RenderJob.status.in_(["pending", "analyzing", "rendering"])))
+        active = session.scalars(
+            select(RenderJob).where(
+                RenderJob.kind == "download", RenderJob.status.in_(["pending", "analyzing", "rendering"])
+            )
+        )
         if any(job.options.get("url") == url for job in active):
             raise ValueError("Это видео уже загружается; откройте очередь")
-        job = RenderJob(kind="download", options={**request.model_dump(), "url": url},
-                        message="Ожидание скачивания YouTube / Twitch")
+        job = RenderJob(
+            kind="download",
+            options={**request.model_dump(), "url": url},
+            message="Ожидание скачивания YouTube / Twitch",
+        )
         session.add(job)
         session.commit()
         notify_workers()
@@ -426,6 +434,9 @@ def control(action: str):
         elif action == "resume":
             update_settings(session, {"production": "running", "queue_paused": False})
         elif action == "stop":
+            from .live_routes import stop_all
+
+            stop_all(session)
             update_settings(
                 session, {"production": "stopped", "queue_paused": True, "publishing_enabled": False}
             )
@@ -490,8 +501,11 @@ def delete_clip(identity: str):
             raise ValueError("Ролик есть в истории публикации; удаление заблокировано")
         if session.scalar(select(TikTokJob.id).where(TikTokJob.clip_id == identity)):
             raise ValueError("Ролик есть в истории TikTok; удаление заблокировано")
-        active = session.scalars(select(RenderJob).where(
-            RenderJob.kind == "ad_overlay", RenderJob.status.in_(["pending", "analyzing", "rendering"])))
+        active = session.scalars(
+            select(RenderJob).where(
+                RenderJob.kind == "ad_overlay", RenderJob.status.in_(["pending", "analyzing", "rendering"])
+            )
+        )
         if any(job.options.get("clip_id") == identity for job in active):
             raise ValueError("Дождитесь наложения рекламы или отмените задание в очереди")
         path = inside(clip.path)

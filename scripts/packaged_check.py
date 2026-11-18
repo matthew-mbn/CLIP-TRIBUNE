@@ -24,6 +24,40 @@ def wait_job(identity, limit=180):
     raise RuntimeError("Воркер EXE не закончил задачу вовремя")
 
 
+def check_live(url):
+    """Опциональная проверка разрешённого пользователем эфира в настоящем EXE."""
+    from backend.video import probe
+
+    item = request(
+        "POST", "/live", dict(url=url, rights=True, segment_seconds=60, duration=15, min_score=0, height=720)
+    )
+    deadline = time.monotonic() + 210
+    try:
+        while time.monotonic() < deadline:
+            row = next(r for r in request("GET", "/live") if r["id"] == item["id"])
+            if row["status"] == "failed":
+                raise RuntimeError(row["error"])
+            clips = [c for c in request("GET", "/clips") if c["metadata_json"].get("live_id") == item["id"]]
+            if clips:
+                assert row["status"] == "recording", row["status"]
+                path = request("GET", f"/clips/{clips[0]['id']}/location")["path"]
+                metadata = probe(path)
+                assert metadata["width"] == 720 and metadata["height"] == 1280
+                assert metadata["audio"] and metadata["codec"] == "h264"
+                return dict(clip_while_recording=True, recording_id=item["id"], clip=metadata, path=path)
+            time.sleep(0.5)
+        raise RuntimeError("Эфир записывается, но клип не появился за отведённое время")
+    finally:
+        request("POST", f"/live/{item['id']}/stop")
+        deadline = time.monotonic() + 25
+        while time.monotonic() < deadline:
+            row = next(r for r in request("GET", "/live") if r["id"] == item["id"])
+            if row["active_slot"] is None:
+                break
+            time.sleep(0.5)
+        assert row["active_slot"] is None, "Запись не остановилась"
+
+
 def run(report_path):
     if request("GET", "/sources")["assets"]:
         raise RuntimeError("Самопроверка допускается только на пустой тестовой базе")
@@ -108,6 +142,9 @@ def run(report_path):
     assert (split_metadata["width"], split_metadata["height"]) == (720, 1280)
     assert split_clip["metadata_json"]["render_options"]["ad_source"]["asset_id"] == advert["id"]
     network_downloads = []
+    live_check = None
+    if live_url := os.getenv("CLIP_TRIBUNE_CHECK_LIVE_URL"):
+        live_check = check_live(live_url)
     if os.getenv("CLIP_TRIBUNE_CHECK_DOWNLOADS") == "1":
         # Явно включаем сетевую проверку; обычная самопроверка остаётся локальной.
         for platform, url in [
@@ -163,6 +200,7 @@ def run(report_path):
                     downloader_version=yt_dlp.version.__version__,
                     deno_bundled=True,
                     network_downloads=network_downloads,
+                    live_recording=live_check,
                 ),
                 ensure_ascii=False,
                 indent=2,
