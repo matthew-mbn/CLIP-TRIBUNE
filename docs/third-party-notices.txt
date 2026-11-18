@@ -1,0 +1,24 @@
+CLIP TRIBUNE uses independently distributed open-source components.
+
+Python 3.15: Python Software Foundation License. https://www.python.org/psf/license/
+Tcl/Tk: BSD-style license. https://www.tcl.tk/software/tcltk/license.html
+CustomTkinter: MIT. https://github.com/TomSchimansky/CustomTkinter
+Pillow: MIT-CMU. https://python-pillow.github.io/
+FastAPI, SQLAlchemy, HTTPX, Alembic, python-dotenv: MIT.
+Uvicorn, psutil: BSD. Cryptography: Apache-2.0 or BSD-3-Clause.
+PyInstaller: GPL with exception for bundled applications. https://pyinstaller.org/
+yt-dlp: Unlicense. https://github.com/yt-dlp/yt-dlp
+yt-dlp-ejs: Unlicense. https://github.com/yt-dlp/ejs
+Deno: MIT. https://github.com/denoland/deno
+Requests: Apache-2.0; urllib3: MIT; Mutagen: GPL-2.0-or-later;
+PyCryptodome: BSD/Public Domain; Brotli: MIT; websockets: BSD-3-Clause.
+
+FFmpeg and FFprobe 9.0.2 essentials build from https://www.gyan.dev/ffmpeg/builds/
+are executed as separate command-line programs, not linked into application code.
+This build includes GPL components (including libx264). FFmpeg GPL license and
+build README are included in the executable resources under licenses/ffmpeg.
+Source and build information: https://ffmpeg.org/download.html
+https://www.gyan.dev/ffmpeg/builds/ and https://github.com/FFmpeg/FFmpeg
+
+Social platform names belong to their respective owners. This application is
+not affiliated with or endorsed by TikTok, Google or YouTube.

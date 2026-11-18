@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360">
+  <title>CLIP TRIBUNE — локальная студия коротких видео</title>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1"><stop stop-color="#17181d"/><stop offset="1" stop-color="#0d0e11"/></linearGradient>
+    <linearGradient id="red" x2="1"><stop stop-color="#f04452" stop-opacity=".24"/><stop offset="1" stop-color="#f04452" stop-opacity="0"/></linearGradient>
+  </defs>
+  <rect width="1280" height="360" rx="24" fill="url(#background)"/>
+  <path d="M1010 0 800 360h195L1205 0" fill="#f04452" opacity=".035"/>
+  <rect x="64" y="64" width="152" height="152" rx="34" fill="#121316" stroke="#34353e"/>
+  <g transform="translate(64 64) scale(.594)">
+    <polygon points="181,54 85,54 54,85 54,171 85,202 181,202 181,164 103,164 92,153 92,103 103,92 181,92" fill="#f7f7f9"/>
+    <polygon points="135,104 181,128 135,152" fill="#f04452"/>
+  </g>
+  <text x="256" y="114" fill="#f04452" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="600" letter-spacing="4">ВАШИ ВИДЕО. ВАША ТРИБУНА.</text>
+  <text x="252" y="186" fill="#f7f7f9" font-family="Segoe UI,Arial,sans-serif" font-size="66" font-weight="800" letter-spacing="1">CLIP TRIBUNE</text>
+  <text x="256" y="226" fill="#a3a5af" font-family="Segoe UI,Arial,sans-serif" font-size="21">Локальная студия коротких видео для Windows</text>
+  <rect x="64" y="273" width="1152" height="1" fill="#2c2d34"/>
+  <rect x="64" y="273" width="240" height="2" fill="url(#red)"/>
+  <text x="64" y="315" fill="#b7b9c3" font-family="Segoe UI,Arial,sans-serif" font-size="15">НАРЕЗКИ</text>
+  <circle cx="184" cy="310" r="2" fill="#f04452"/>
+  <text x="210" y="315" fill="#b7b9c3" font-family="Segoe UI,Arial,sans-serif" font-size="15">ДВА ЭКРАНА</text>
+  <circle cx="360" cy="310" r="2" fill="#f04452"/>
+  <text x="386" y="315" fill="#b7b9c3" font-family="Segoe UI,Arial,sans-serif" font-size="15">РЕКЛАМА</text>
+  <circle cx="507" cy="310" r="2" fill="#f04452"/>
+  <text x="533" y="315" fill="#b7b9c3" font-family="Segoe UI,Arial,sans-serif" font-size="15">YOUTUBE + TWITCH</text>
+  <text x="1216" y="315" text-anchor="end" fill="#777b88" font-family="Segoe UI,Arial,sans-serif" font-size="14">PYTHON / TKINTER</text>
+</svg>
