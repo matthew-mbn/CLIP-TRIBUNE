@@ -11,6 +11,7 @@ from .config import FFMPEG, STORAGE
 from .models import LiveRecording, LiveSegment, RenderedClip, RenderJob, SourceAsset, uid
 from .providers import HttpSpeechProvider, write_srt
 from .security import file_hash, inside
+from .source_identity import recording_identity
 from .youtube import secret
 from .database import settings
 
@@ -227,10 +228,10 @@ def process(session, job, options, cancelled):
                     transcript,
                     source_name=recording.title,
                     metadata_extra=dict(
+                        **recording_identity(recording),
                         live_id=recording.id,
                         recording_start=origin + candidate["start"],
                         segment_id=part.id,
-                        source_url=recording.url,
                     ),
                 )
             except Exception:
@@ -277,7 +278,7 @@ def export(session, job, cancelled):
                 path=str(destination),
                 sha256=digest,
                 rights=True,
-                metadata_json=video.probe(destination),
+                metadata_json={**video.probe(destination), **recording_identity(recording)},
             )
             session.add(asset)
         session.commit()

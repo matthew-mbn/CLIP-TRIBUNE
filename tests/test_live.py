@@ -138,6 +138,7 @@ def test_live_segments_clips_and_export(session, sample_video):
     assert session.get(RenderJob, first.id).status == "ready"
     first_clips = session.scalars(select(RenderedClip)).all()
     assert len(first_clips) == 1
+    assert first_clips[0].title == "TWITCH: example"
     assert video.probe(first_clips[0].path)["audio"]
     # Повтор после сбоя не создаёт вторую копию уже сохранённого результата.
     process_job(first.id)
@@ -157,6 +158,8 @@ def test_live_segments_clips_and_export(session, sample_video):
     assert session.get(RenderJob, job["id"]).status == "ready"
     asset = session.scalar(select(SourceAsset))
     assert asset and Path(asset.path).is_file()
+    assert asset.metadata_json["source_creator"] == "example"
+    assert asset.metadata_json["source_platform"] == "twitch"
     assert abs(video.probe(asset.path)["duration"] - video.probe(sample_video)["duration"]) < 1
 
 

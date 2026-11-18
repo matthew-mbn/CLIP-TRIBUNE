@@ -63,7 +63,11 @@ def test_reject_live_private_and_long():
 def test_download_job_imports_and_handles_cancel(client, session, sample_video, monkeypatch):
     def fake_download(url, height, folder, cancelled, progress):
         progress(dict(progress=80, message="Тестовая передача файла"))
-        return sample_video, "Тестовый источник"
+        return (
+            sample_video,
+            "Тестовый источник",
+            dict(source_platform="youtube", source_creator="TestCreator", source_url=url),
+        )
 
     monkeypatch.setattr(downloads, "download", fake_download)
     body = dict(url="https://youtu.be/BaW_jenozKc", rights=True)
@@ -72,7 +76,10 @@ def test_download_job_imports_and_handles_cancel(client, session, sample_video, 
     process_job(identity)
     session.expire_all()
     assert session.get(RenderJob, identity).status == "ready"
-    assert session.scalar(select(SourceAsset)).name == "Тестовый источник.mp4"
+    asset = session.scalar(select(SourceAsset))
+    assert asset.name == "Тестовый источник.mp4"
+    assert asset.metadata_json["source_creator"] == "TestCreator"
+    assert asset.metadata_json["source_platform"] == "youtube"
     identity = client.post("/api/sources/download", json=body).json()["id"]
     monkeypatch.setattr(downloads, "download", lambda *args: (_ for _ in ()).throw(Cancelled()))
     claim_job(session, "test")

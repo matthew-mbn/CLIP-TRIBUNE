@@ -195,6 +195,7 @@ class LiveRecording(Entity, Base):
     __table_args__ = (Index("uq_live_active_slot", "active_slot", unique=True),)
     url: Mapped[str] = mapped_column(Text)
     title: Mapped[str] = mapped_column(Text, default="Прямой эфир")
+    creator_name: Mapped[str] = mapped_column(Text, default="", server_default="")
     platform: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(24), default="pending")
     active_slot: Mapped[int | None] = mapped_column(Integer, nullable=True)

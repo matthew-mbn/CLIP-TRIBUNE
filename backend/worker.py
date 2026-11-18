@@ -25,6 +25,7 @@ from .schemas import PublishInput, RenderOptions
 from .security import file_hash
 from .services import claim_job, create_jobs, prepare_publish, recover_jobs
 from .sources import download_media, import_file, remote_suffix
+from .source_identity import creator_title
 from .youtube import QuotaExceeded, search_trends, secret, upload
 
 
@@ -76,13 +77,14 @@ def process_job(job_id):
                 job.message = "Получение информации о видео"
                 session.commit()
                 with TemporaryDirectory(dir=STORAGE / "temp") as folder:
-                    target, title = download(
+                    target, title, identity_info = download(
                         job.options["url"], job.options["height"], folder, cancelled, progress
                     )
                     if cancelled():
                         raise video.Cancelled()
                     asset = import_file(session, target, True)
                     asset.name = title + target.suffix
+                    asset.metadata_json = {**asset.metadata_json, **identity_info}
                     session.commit()
                 job.message = "Скачано: " + asset.name + ". Видео доступно в разделе «Источники»."
             elif job.kind in ("live_clip", "live_export"):
@@ -296,6 +298,18 @@ def save_clip(
     )
     if metadata_extra:
         metadata.update(metadata_extra)
+    # Автор относится к исходнику, а не к аккаунту, куда отправляется клип.
+    # Явное название сохраняется даже при подключённом AI-генераторе заголовков.
+    if asset and not source_clip:
+        metadata.update(
+            {
+                k: asset.metadata_json[k]
+                for k in ("source_platform", "source_creator", "source_url")
+                if k in asset.metadata_json
+            }
+        )
+    if not source_clip and (title := creator_title(metadata)):
+        metadata["titles"] = [title]
     thumb = output.with_suffix(".png")
     video.thumbnail(output, thumb)
     clip = RenderedClip(

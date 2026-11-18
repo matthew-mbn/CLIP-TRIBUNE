@@ -17,6 +17,7 @@ import psutil
 
 from .config import FFMPEG, MAX_UPLOAD, ROOT
 from .video import Cancelled
+from .source_identity import source_identity
 
 
 def validate_url(value):
@@ -144,7 +145,13 @@ def _download(url, height, folder):
         if len(files) != 1 or not files[0].stat().st_size:
             raise ValueError("Загрузчик не создал готовый видеофайл")
         write_status(
-            folder, "result.json", dict(path=str(files[0]), title=str(info.get("title") or "Видео")[:180])
+            folder,
+            "result.json",
+            dict(
+                path=str(files[0]),
+                title=str(info.get("title") or "Видео")[:180],
+                source_identity=source_identity(info, url),
+            ),
         )
     except Exception as error:
         message = str(error)[:1200]
@@ -200,7 +207,7 @@ def download(url, height, folder, cancelled, on_progress):
         result = json.loads(result_path.read_text(encoding="utf-8"))
         if result.get("error"):
             raise ValueError("Не удалось скачать видео. Сервис мог ограничить доступ.\n" + result["error"])
-        return Path(result["path"]), result["title"]
+        return Path(result["path"]), result["title"], result["source_identity"]
     finally:
         if process.is_alive():
             terminate_tree(process)

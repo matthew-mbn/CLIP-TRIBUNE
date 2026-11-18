@@ -24,6 +24,7 @@ from .database import Session, settings
 from .downloads import deno_path, terminate_tree, validate_url
 from .models import LiveRecording, LiveSegment, RenderJob, now
 from .security import inside
+from .source_identity import source_identity
 from . import video
 
 ACTIVE = ("pending", "connecting", "recording", "reconnecting", "stopping")
@@ -120,7 +121,7 @@ def resolve_stream(url, height):
         )
     if not any(item["video"] for item in streams):
         raise ValueError("В трансляции не найдена видеодорожка")
-    return str(info.get("title") or "Прямой эфир")[:220], streams
+    return str(info.get("title") or "Прямой эфир")[:220], streams, source_identity(info, url)
 
 
 def stream_inputs(streams):
@@ -281,13 +282,14 @@ def capture(identity, event):
             if stopped(identity, event):
                 final_status, final_message = "stopped", "Запись остановлена"
                 break
-            title, streams = resolve_stream(url, options["height"])
+            title, streams, identity_info = resolve_stream(url, options["height"])
             if stopped(identity, event):
                 final_status, final_message = "stopped", "Запись остановлена"
                 break
             set_state(
                 identity,
                 title=title,
+                creator_name=identity_info["source_creator"],
                 status="recording",
                 message="Идёт запись; нарезки появятся после первой части",
             )

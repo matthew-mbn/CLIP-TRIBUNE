@@ -27,7 +27,7 @@ def frame(request: WebcamFrameInput):
         if request.second > 120:
             raise ValueError("Для кадра эфира можно пропустить от 0 до 120 секунд")
         url, _ = validate_live_url(request.url)
-        _, streams = resolve_stream(url, request.height)
+        _, streams, _ = resolve_stream(url, request.height)
         # Для кадра достаточно видео; отдельный аудиопоток YouTube не открываем.
         inputs = stream_inputs([next(s for s in streams if s["video"])])
     else:

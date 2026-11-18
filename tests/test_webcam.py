@@ -175,7 +175,9 @@ def test_live_preview_uses_only_video_and_hides_network_errors(client, monkeypat
     from backend.composition import media_input
 
     called = []
-    monkeypatch.setattr(live, "resolve_stream", lambda *_: ("Live", [dict(video=False), dict(video=True)]))
+    monkeypatch.setattr(
+        live, "resolve_stream", lambda *_: ("Live", [dict(video=False), dict(video=True)], {})
+    )
     monkeypatch.setattr(
         live, "stream_inputs", lambda streams: called.append(streams) or media_input(webcam_source)
     )

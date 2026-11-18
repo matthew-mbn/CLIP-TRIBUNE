@@ -54,7 +54,7 @@ if not token_path.exists():
 LOCAL_TOKEN = token_path.read_text(encoding="utf-8")
 
 app = FastAPI(
-    title="CLIP TRIBUNE", version="0.7.0", description="Локальная студия автоматического видеомонтажа"
+    title="CLIP TRIBUNE", version="0.7.1", description="Локальная студия автоматического видеомонтажа"
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 app.include_router(tiktok_router)

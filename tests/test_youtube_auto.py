@@ -74,6 +74,7 @@ def start(client, session, clip, channel, account, target="both", **youtube_opti
     assert result.status_code == 200, result.text
     record = session.get(LiveRecording, result.json()["id"])
     clip.metadata_json = {"live_id": record.id}
+    clip.title = "TWITCH: test_streamer"
     session.commit()
     return record
 
@@ -92,10 +93,12 @@ def test_only_selected_platforms_receive_clip(client, session, clip, channel, ac
     if yt:
         assert yt[0].status == "published" and yt[0].video_id == "youtube-video"
         assert remote[0]["status"]["privacyStatus"] == "unlisted"
+        assert remote[0]["snippet"]["title"] == "TWITCH: test_streamer"
         assert remote[0]["status"]["containsSyntheticMedia"] is True
         assert remote[0]["paidProductPlacementDetails"]["hasPaidProductPlacement"] is True
     if tt:
         assert tt[0].status == "processing"
+        assert tt[0].options["title"] == "TWITCH: test_streamer"
     assert not settings(session)["publishing_enabled"]  # Ручная очередь не включилась.
     assert record.options["youtube_auto"]["channel_id"] == channel.id
 
