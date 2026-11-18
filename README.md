@@ -5,6 +5,7 @@
   · <a href="#первая-нарезка">Как пользоваться</a>
   · <a href="#запуск-из-python">Запуск из Python</a>
   · <a href="docs/learning-python.md">Изучение кода</a>
+  · <a href="https://matthew-mbn.github.io/CLIP-TRIBUNE/">Сайт</a>
 </p>
 
 **CLIP TRIBUNE** — локальная студия коротких видео для Windows. Нарезки, два экрана, реклама на зелёном фоне, скачивание YouTube / Twitch, публикация в YouTube и TikTok.
@@ -158,3 +159,5 @@ powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
 Нет полноценного монтажного timeline, трекинга лиц, гарантии смысловой завершённости или «вирусности» нарезки. Кодирование выполняется на CPU. Пресеты меняют параметры и эвристики; Storytelling / Educational / Custom пока используют общий алгоритм отбора. AI-озвучка и генерация видео по тексту не реализованы.
 
 Социальные сети могут менять API и доступность загрузок. CLIP TRIBUNE не связан с Google, YouTube, Twitch или TikTok. [Компоненты и лицензии](docs/third-party-notices.txt).
+
+[Условия использования](https://matthew-mbn.github.io/CLIP-TRIBUNE/terms-ru.html) · [Политика конфиденциальности](https://matthew-mbn.github.io/CLIP-TRIBUNE/privacy-ru.html).
