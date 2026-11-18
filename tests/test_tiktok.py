@@ -142,10 +142,28 @@ def test_direct_validation_and_consent(client, account, clip, monkeypatch):
     assert client.delete(f"/api/clips/{clip.id}").status_code == 400
 
 
-@pytest.mark.parametrize("size", [1, 4_000_000, 10_485_760, 50_000_123, 70_000_000, 4 * 1024**3])
+@pytest.mark.parametrize(
+    "size",
+    [
+        1,
+        4_000_000,
+        10_485_760,
+        10_485_761,
+        15_000_000,
+        20_971_519,
+        50_000_123,
+        64_000_000,
+        64_000_001,
+        70_000_000,
+        4 * 1024**3,
+    ],
+)
 def test_chunk_rules(size):
     chunk, count = tiktok.chunk_plan(size)
     assert count == size // chunk
+    assert 1 <= count <= 1000
+    if count == 1:
+        assert chunk == size  # Регрессия: объявляли 10 МиБ, а передавали 15 МиБ.
     final = size - chunk * (count - 1)
     assert final <= 128 * 1024**2
     assert count == 1 or 5 * 1024**2 <= chunk <= 64 * 1024**2

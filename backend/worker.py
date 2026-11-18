@@ -339,7 +339,15 @@ def publish_once():
             )
             .order_by(PublishJob.created_at)
         ).all()
-        job = next((item for item in waiting if item.options.get("approved") or config["auto_publish"]), None)
+        job = next(
+            (
+                item
+                for item in waiting
+                if not item.options.get("auto_live_id")
+                and (item.options.get("approved") or config["auto_publish"])
+            ),
+            None,
+        )
         if not job:
             return
         claimed = session.execute(
@@ -511,6 +519,13 @@ def main():
                         log(session, f"Планировщик: {error}", "error")
                 last_tick = time.monotonic()
             publish_once()
+            from .youtube_auto import tick as youtube_auto_tick
+
+            try:
+                youtube_auto_tick()
+            except Exception as error:
+                with Session() as session:
+                    log(session, f"Автопубликация YouTube: {error}", "error")
             from .tiktok import tick as tiktok_tick
 
             try:

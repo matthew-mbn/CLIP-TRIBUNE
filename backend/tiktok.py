@@ -172,8 +172,17 @@ def post(session, account, endpoint, payload, required_scope=""):
             timeout=45,
         )
         return decoded(response, required_scope=required_scope)
-    except httpx.RequestError:
-        raise RuntimeError("Не удалось связаться с TikTok. Проверьте соединение и статус отправки.") from None
+    except httpx.RequestError as error:
+        # Строка исключения может содержать URL с секретом. Показываем только тип.
+        if isinstance(error, httpx.TimeoutException):
+            reason = "Истекло время ожидания ответа TikTok"
+        elif isinstance(error, httpx.ProxyError):
+            reason = "Не удалось подключиться к TikTok через прокси"
+        else:
+            reason = "Не удалось связаться с TikTok"
+        raise RuntimeError(
+            f"{reason} ({type(error).__name__}). Проверьте соединение и статус отправки."
+        ) from None
 
 
 def creator_info(session, account):
@@ -222,6 +231,23 @@ def validate_direct(options, info, duration):
         raise ValueError("Реклама другого бренда не может иметь видимость «Только я»")
 
 
+def rejected_chunk_job(job):
+    """Только явный отказ init: TikTok ещё не выдал адрес приёма файла.
+
+    Сетевой сбой или неизвестный результат сюда не относятся. Повтор возможен
+    лишь после нового нажатия «Отправить», не автоматически после обновления.
+    """
+    return bool(
+        job.status == "failed"
+        and not job.publish_id
+        and not job.upload_url
+        and (job.error or "").startswith(
+            ("TikTok: invalid_params (HTTP 400)", "TikTok: invalid_param (HTTP 400)")
+        )
+        and "The chunk size is invalid" in job.error
+    )
+
+
 def enqueue(session, request, creator=None, auto_live_id=None):
     if not request.consent:
         raise ValueError("Подтвердите отправку и условия TikTok")
@@ -232,9 +258,10 @@ def enqueue(session, request, creator=None, auto_live_id=None):
         raise ValueError("Файл ролика не найден")
     required_scope = "video.publish" if request.mode == "direct" else "video.upload"
     require_scope(account, required_scope)
-    if session.scalar(
+    existing = session.scalar(
         select(TikTokJob).where(TikTokJob.clip_id == clip.id, TikTokJob.account_id == account.id)
-    ):
+    )
+    if existing and (auto_live_id or not rejected_chunk_job(existing)):
         raise ValueError(
             "Этот ролик уже есть в истории TikTok. Проверьте его статус перед повторной отправкой"
         )
@@ -245,6 +272,34 @@ def enqueue(session, request, creator=None, auto_live_id=None):
         validate_direct(
             options, creator if creator is not None else creator_info(session, account), clip.duration
         )
+    if existing:
+        # Условное обновление не позволит двум одновременным кликам поставить
+        # повторно одну отправку. Все настройки проверены заново выше.
+        changed = session.execute(
+            update(TikTokJob)
+            .where(
+                TikTokJob.id == existing.id,
+                TikTokJob.status == "failed",
+                TikTokJob.publish_id.is_(None),
+                TikTokJob.upload_url.is_(None),
+                TikTokJob.error == existing.error,
+            )
+            .values(
+                status="pending",
+                mode=request.mode,
+                options=options,
+                progress=0,
+                error=None,
+                result={},
+                updated_at=now(),
+            )
+        )
+        if not changed.rowcount:
+            session.rollback()
+            raise ValueError("Статус отправки уже изменился. Обновите список TikTok")
+        session.commit()
+        session.refresh(existing)
+        return existing
     job = TikTokJob(clip_id=clip.id, account_id=account.id, mode=request.mode, options=options)
     session.add(job)
     session.commit()
@@ -254,8 +309,15 @@ def enqueue(session, request, creator=None, auto_live_id=None):
 def chunk_plan(size):
     if size <= 0 or size > 4 * 1024**3:
         raise ValueError("TikTok: размер MP4 должен быть от 1 байта до 4 ГБ")
-    chunk = min(size, 10 * 1024**2)
-    return chunk, max(1, size // chunk)
+    # Для одного запроса объявленный размер части равен ВСЕМУ файлу.
+    # Раньше файл 10–20 МиБ давал count=1, chunk=10 МиБ, хотя PUT был больше.
+    # Берём 64 000 000 байт как консервативный предел целой загрузки.
+    if size <= 64_000_000:
+        return size, 1
+    # Для нескольких частей используем десятичные байты, как в примере TikTok.
+    # Остаток присоединяется к последней части; округлять count вверх нельзя.
+    chunk = 10_000_000
+    return chunk, size // chunk
 
 
 def upload(session, job):

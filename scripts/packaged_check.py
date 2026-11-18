@@ -298,6 +298,10 @@ def run(report_path):
                 assert not app.pending and not app.page.creator_ready
                 assert "video.publish" in app.page.creator_label.cget("text")
             if name == "Эфиры":
+                assert app.page.youtube_auto.options() == {"enabled": False}
+                app.page.youtube_auto.enabled.set(True)
+                assert app.page.youtube_auto.body.winfo_manager() == "pack"
+                app.page.youtube_auto.enabled.set(False)
                 panel = app.page.tiktok_auto
                 assert panel.options() == {"enabled": False}
                 panel.enabled.set(True)
@@ -317,6 +321,7 @@ def run(report_path):
                     webcam_editor=True,
                     tiktok_permissions=True,
                     tiktok_auto_panel=True,
+                    youtube_auto_panel=True,
                     ads_preview=True,
                     ad_copy=True,
                     downloader_version=yt_dlp.version.__version__,

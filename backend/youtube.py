@@ -313,6 +313,8 @@ def upload(session, job, clip, cancelled=lambda: False):
     from pathlib import Path
     from .video import Cancelled
 
+    if cancelled():
+        raise Cancelled("Загрузка остановлена")
     channel = session.get(YouTubeChannel, job.channel_id)
     if not channel:
         raise ValueError("Выберите подключённый канал")
@@ -321,6 +323,8 @@ def upload(session, job, clip, cancelled=lambda: False):
     with httpx.Client(timeout=60, follow_redirects=False) as client:
         if not job.upload_url:
             reserve_quota(session, "upload")
+            if cancelled():
+                raise Cancelled("Загрузка остановлена")
             status = dict(
                 privacyStatus=job.options.get("privacy", "private"),
                 selfDeclaredMadeForKids=job.options.get("made_for_kids", False),
@@ -328,7 +332,11 @@ def upload(session, job, clip, cancelled=lambda: False):
             )
             response = client.post(
                 "https://www.googleapis.com/upload/youtube/v3/videos",
-                params={"uploadType": "resumable", "part": "snippet,status"},
+                params={
+                    "uploadType": "resumable",
+                    "part": "snippet,status"
+                    + (",paidProductPlacementDetails" if "paid_product_placement" in job.options else ""),
+                },
                 headers={
                     **headers,
                     "X-Upload-Content-Length": str(size),
@@ -337,11 +345,20 @@ def upload(session, job, clip, cancelled=lambda: False):
                 json=dict(
                     snippet=dict(
                         title=clip.title[:100],
-                        description=clip.metadata_json["description"][:5000],
+                        description=clip.metadata_json.get("description", "")[:5000],
                         tags=clip.metadata_json.get("hashtags", []),
                         categoryId=clip.metadata_json.get("category", "22"),
                     ),
                     status=status,
+                    **(
+                        {
+                            "paidProductPlacementDetails": {
+                                "hasPaidProductPlacement": job.options["paid_product_placement"]
+                            }
+                        }
+                        if "paid_product_placement" in job.options
+                        else {}
+                    ),
                 ),
             )
             google_error(response)

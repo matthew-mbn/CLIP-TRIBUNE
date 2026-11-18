@@ -56,6 +56,12 @@ def start(request: LiveInput):
             raise ValueError("Уже идёт запись. Сначала остановите текущий эфир")
         options = request.model_dump(exclude={"url", "rights"})
         options["ad_source"] = snapshot(session, duration=request.duration) if request.use_ads else None
+        if request.youtube_auto.enabled:
+            from .youtube_auto import validate_setup as validate_youtube
+
+            validate_youtube(session, options["youtube_auto"])
+            if options["ad_source"] and not request.youtube_auto.paid_product_placement:
+                raise ValueError("Для автопубликации рекламы в YouTube отметьте платное продвижение")
         if request.tiktok_auto.enabled:
             from .tiktok_auto import validate_setup
 
@@ -71,6 +77,7 @@ def start(request: LiveInput):
             options=options,
             clipping_enabled=request.auto_clip,
             auto_tiktok_enabled=request.tiktok_auto.enabled,
+            auto_youtube_enabled=request.youtube_auto.enabled,
         )
         session.add(item)
         try:
@@ -90,6 +97,9 @@ def stop(identity: str):
         from .tiktok_auto import stop as stop_auto
 
         stop_auto(session, item)
+        from .youtube_auto import stop as stop_youtube
+
+        stop_youtube(session, item)
         if item.active_slot is not None:
             if item.status == "pending":
                 item.status, item.active_slot, item.finished_at = "stopped", None, now()
@@ -132,6 +142,9 @@ def stop_all(session):
     for item in session.scalars(select(LiveRecording)):
         item.clipping_enabled = False
         item.auto_tiktok_enabled = False
+        from .youtube_auto import stop as stop_youtube
+
+        stop_youtube(session, item)
         if item.active_slot is not None:
             item.status = "stopping"
             item.message = "Остановка всех задач"
@@ -162,4 +175,25 @@ def tiktok_control(identity: str, action: str):
             session.commit()
         else:
             raise ValueError("Неизвестная команда TikTok")
+        return public(item)
+
+
+@router.post("/{identity}/youtube/{action}")
+def youtube_control(identity: str, action: str):
+    from .youtube_auto import stop as stop_auto, validate_setup, set_state
+
+    with Session() as session:
+        item = required(session, identity)
+        if action == "stop":
+            stop_auto(session, item)
+        elif action == "resume":
+            config = item.options.get("youtube_auto", {})
+            if not config.get("enabled"):
+                raise ValueError("Автопубликация YouTube не была включена для этой записи")
+            validate_setup(session, config)
+            item.auto_youtube_enabled = True
+            set_state(item, message="Автопубликация включена", error="", ack_errors_before=now())
+            session.commit()
+        else:
+            raise ValueError("Неизвестная команда YouTube")
         return public(item)

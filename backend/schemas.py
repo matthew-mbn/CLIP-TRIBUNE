@@ -118,6 +118,18 @@ class TikTokAutoInput(BaseModel):
     consent: bool = False
 
 
+class YouTubeAutoInput(BaseModel):
+    enabled: bool = False
+    channel_id: str = ""
+    privacy: Literal["private", "unlisted", "public"] = "private"
+    interval_minutes: int = Field(default=30, ge=1, le=1440)
+    max_posts: int = Field(default=5, ge=1, le=100)
+    synthetic: bool = False
+    made_for_kids: bool = False
+    paid_product_placement: bool = False
+    consent: bool = False
+
+
 class LiveInput(RemoteInput, FrameLayout):
     """Запись всегда запускается явным действием пользователя и имеет пределы."""
 
@@ -137,9 +149,15 @@ class LiveInput(RemoteInput, FrameLayout):
     theme: str = Field(default="", max_length=150)
 
     tiktok_auto: TikTokAutoInput = Field(default_factory=TikTokAutoInput)
+    youtube_auto: YouTubeAutoInput = Field(default_factory=YouTubeAutoInput)
 
     @model_validator(mode="after")
     def auto_post_requires_setup(self):
+        if self.youtube_auto.enabled:
+            if not self.auto_clip or not self.youtube_auto.channel_id or not self.youtube_auto.consent:
+                raise ValueError(
+                    "Для YouTube включите нарезки, выберите канал и разрешите автоматическую отправку"
+                )
         if self.tiktok_auto.enabled:
             if not self.auto_clip:
                 raise ValueError("Для автопубликации включите автоматические нарезки")

@@ -69,7 +69,7 @@ def test_all_pages_navigation_and_jobs(client, session, asset, monkeypatch):
 
 def test_live_auto_setup_preserves_selection_and_stops_series(client, session, monkeypatch):
     from backend import tiktok
-    from backend.models import TikTokAccount, now
+    from backend.models import TikTokAccount, YouTubeChannel, now
     from backend.security import encrypt
     from test_tiktok import CREATOR
 
@@ -87,6 +87,13 @@ def test_live_auto_setup_preserves_selection_and_stops_series(client, session, m
         ),
     )
     session.add(account)
+    session.add(
+        YouTubeChannel(
+            youtube_id="test-channel",
+            name="Test channel",
+            tokens=encrypt(dict(access_token="test", expires_at=now() + 3600)),
+        )
+    )
     session.commit()
     monkeypatch.setattr(tiktok, "creator_info", lambda *a: CREATOR)
     errors = []
@@ -105,6 +112,11 @@ def test_live_auto_setup_preserves_selection_and_stops_series(client, session, m
         app.show_page("Эфиры")
         drain(app)
         page, panel = app.page, app.page.tiktok_auto
+        yt = page.youtube_auto
+        assert yt.options() == {"enabled": False}
+        yt.enabled.set(True)
+        yt.privacy.set("По ссылке")
+        yt.consent.set(True)
         assert panel.options() == {"enabled": False}
         panel.enabled.set(True)
         drain(app)
@@ -117,16 +129,22 @@ def test_live_auto_setup_preserves_selection_and_stops_series(client, session, m
         drain(app)
         assert panel.privacy.get() == "Только я" and panel.consent.get()
         assert panel.options()["caption_template"] == "{title} #стрим"
+        assert yt.consent.get() and yt.options()["privacy"] == "unlisted"
         page.url.set("https://www.twitch.tv/example")
         page.rights.set(True)
         page.start()
         drain(app)
         row = next(iter(page.rows.values()))
         assert row["auto_tiktok_enabled"] and not panel.consent.get()
+        assert row["auto_youtube_enabled"] and not yt.consent.get()
         assert "включена" in page.info.cget("text")
         page.control_tiktok("stop")
         drain(app)
         assert not page.rows[row["id"]]["auto_tiktok_enabled"]
+        assert page.rows[row["id"]]["auto_youtube_enabled"]
+        page.control_youtube("stop")
+        drain(app)
+        assert not page.rows[row["id"]]["auto_youtube_enabled"]
         assert not errors, errors
     finally:
         app.close()

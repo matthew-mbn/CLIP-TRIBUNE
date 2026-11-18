@@ -10,6 +10,7 @@ from .ads_page import card
 from .base import Page, date
 from .webcam import WebcamPanel
 from .live_tiktok import TikTokAutoPanel
+from .live_youtube import YouTubeAutoPanel
 
 STATUSES = {
     "pending": "Ожидание",
@@ -130,8 +131,13 @@ class LivePage(Page):
         ).pack(anchor="w", pady=7)
         posting = card(self)
         theme.text(posting, "04  /  Автопубликация", font=("Segoe UI", 16, "bold"))
+        theme.text(
+            posting, "Включите TikTok, YouTube или оба сервиса. Настройки и лимиты независимы.", muted=True
+        )
         self.tiktok_auto = TikTokAutoPanel(posting, app)
         self.tiktok_auto.pack(fill="x")
+        self.youtube_auto = YouTubeAutoPanel(posting, app)
+        self.youtube_auto.pack(fill="x", pady=(18, 0))
         controls = self.toolbar()
         self.start_button = theme.button(controls, "● Начать запись", self.start, True)
         theme.button(controls, "Остановить выбранную", self.stop)
@@ -160,9 +166,13 @@ class LivePage(Page):
         theme.button(row, "Открыть папку записи", self.open_folder)
         theme.button(row, "Собрать полную запись", self.export)
         auto_controls = self.toolbar()
-        theme.button(auto_controls, "Остановить автопубликацию", lambda: self.control_tiktok("stop"))
-        theme.button(auto_controls, "Возобновить автопубликацию", lambda: self.control_tiktok("resume"))
+        theme.button(auto_controls, "Стоп авто · TikTok", lambda: self.control_tiktok("stop"))
+        theme.button(auto_controls, "Возобновить · TikTok", lambda: self.control_tiktok("resume"))
         theme.button(auto_controls, "Очередь TikTok", lambda: self.app.show_page("TikTok"))
+        youtube_controls = self.toolbar()
+        theme.button(youtube_controls, "Стоп авто · YouTube", lambda: self.control_youtube("stop"))
+        theme.button(youtube_controls, "Возобновить · YouTube", lambda: self.control_youtube("resume"))
+        theme.button(youtube_controls, "Очередь YouTube", lambda: self.app.show_page("Публикация"))
         self.info = theme.text(
             self,
             "Нарезки сохраняются в библиотеке. Автопубликация работает только при включении перед записью.",
@@ -173,6 +183,7 @@ class LivePage(Page):
     def refresh(self, quiet=False):
         self.call("GET", "/live", callback=self.loaded, quiet=quiet)
         self.tiktok_auto.refresh(quiet=quiet)
+        self.youtube_auto.refresh(quiet=quiet)
 
     def loaded(self, rows):
         self.rows = {row["id"]: row for row in rows}
@@ -221,6 +232,18 @@ class LivePage(Page):
                     text += "\n" + state["error"]
                 if row.get("auto_tiktok_enabled") and state.get("next_at"):
                     text += "\nСледующая отправка не раньше: " + date(state["next_at"])
+            if row["options"].get("youtube_auto", {}).get("enabled"):
+                state = row.get("youtube_auto_state", {})
+                text += "\nYouTube: " + (
+                    "автопубликация включена"
+                    if row.get("auto_youtube_enabled")
+                    else "автопубликация остановлена"
+                )
+                text += " · " + state.get("message", "Ждём готовый клип")
+                if state.get("error"):
+                    text += "\n" + state["error"]
+                if row.get("auto_youtube_enabled") and state.get("next_at"):
+                    text += "\nСледующая отправка не раньше: " + date(state["next_at"])
             self.info.configure(text=text)
 
     def webcam_source(self):
@@ -255,6 +278,7 @@ class LivePage(Page):
                 subtitles=self.subtitles.get(),
                 use_ads=self.ads.get(),
                 tiktok_auto=self.tiktok_auto.options(),
+                youtube_auto=self.youtube_auto.options(),
             )
             if FRAMING[self.framing.get()] == "webcam":
                 data.update(self.webcam.options())
@@ -265,6 +289,7 @@ class LivePage(Page):
 
     def started(self, result):
         self.tiktok_auto.consent.set(False)
+        self.youtube_auto.consent.set(False)
         self.preselected = result["id"]
         self.refresh()
 
@@ -275,6 +300,10 @@ class LivePage(Page):
     def control_tiktok(self, action):
         for identity in self.selected(self.tree):
             self.call("POST", f"/live/{identity}/tiktok/{action}", callback=lambda _: self.refresh())
+
+    def control_youtube(self, action):
+        for identity in self.selected(self.tree):
+            self.call("POST", f"/live/{identity}/youtube/{action}", callback=lambda _: self.refresh())
 
     def open_folder(self):
         selected = self.selected(self.tree)

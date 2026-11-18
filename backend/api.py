@@ -20,6 +20,7 @@ from .config import FFMPEG, FFPROBE, STORAGE, MAX_UPLOAD
 from .database import Session, public, settings, update_settings
 from .models import (
     ActivityLog,
+    LiveRecording,
     ContentProject,
     PublishJob,
     RenderJob,
@@ -53,7 +54,7 @@ if not token_path.exists():
 LOCAL_TOKEN = token_path.read_text(encoding="utf-8")
 
 app = FastAPI(
-    title="CLIP TRIBUNE", version="0.6.0", description="Локальная студия автоматического видеомонтажа"
+    title="CLIP TRIBUNE", version="0.7.0", description="Локальная студия автоматического видеомонтажа"
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 app.include_router(tiktok_router)
@@ -578,6 +579,9 @@ def publisher():
             ],
             "quota": youtube.quota_status(session),
             "enabled": settings(session)["publishing_enabled"],
+            "live_auto_enabled": bool(
+                session.scalar(select(LiveRecording.id).where(LiveRecording.auto_youtube_enabled.is_(True)))
+            ),
         }
 
 
@@ -626,6 +630,8 @@ def publish_action(identity: str, action: str, request: PublishAction):
             if not job.channel_id:
                 raise ValueError("Сначала подключите и выберите канал")
             job.status = "pending"
+            # Явная ручная отправка отделяется от остановленной серии эфира.
+            job.options = {k: v for k, v in job.options.items() if k != "auto_live_id"}
             job.options = {**job.options, "approved": True}
             update_settings(session, {"publishing_enabled": True})
         elif action == "cancel" and job.status in ("pending", "publishing", "failed"):
@@ -639,6 +645,12 @@ def publish_action(identity: str, action: str, request: PublishAction):
 @app.post("/api/publishing/stop")
 def stop_publishing():
     with Session() as session:
+        from .youtube_auto import stop as stop_auto
+
+        for recording in session.scalars(
+            select(LiveRecording).where(LiveRecording.auto_youtube_enabled.is_(True))
+        ).all():
+            stop_auto(session, recording)
         update_settings(session, {"publishing_enabled": False, "auto_publish": False})
     return {"stopped": True}
 

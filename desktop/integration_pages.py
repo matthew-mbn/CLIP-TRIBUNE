@@ -172,7 +172,8 @@ class PublisherPage(Page):
         self.quota.configure(
             text=f"Загрузки: {quota['upload']['used']}/{quota['upload']['limit']} • Поиск: {quota['search']['used']}/{quota['search']['limit']} • Остальные: {quota['general']['used']}/{quota['general']['limit']}\n"
             + result["quota"]["note"]
-            + f" Отправка: {'включена' if result['enabled'] else 'остановлена'}."
+            + f" Ручная очередь: {'включена' if result['enabled'] else 'остановлена'}."
+            + f" Автопубликация эфиров: {'включена' if result.get('live_auto_enabled') else 'выключена'}."
         )
 
     def connect(self):

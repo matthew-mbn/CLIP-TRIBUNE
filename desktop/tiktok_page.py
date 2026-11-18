@@ -146,6 +146,14 @@ class TikTokPage(Page):
             muted=True,
             wraplength=850,
         )
+        theme.text(
+            self,
+            "После ошибки «The chunk size is invalid» выберите тот же ролик и отправьте заново. "
+            "Повтор доступен только для отказа до приёма файла.",
+            muted=True,
+            wraplength=850,
+            font=("Segoe UI", 11),
+        )
         self.mode.trace_add("write", lambda *_: self.mode_changed())
         self.account.trace_add("write", lambda *_: self.load_creator())
         self.privacy.trace_add("write", lambda *_: self.validate_form())
