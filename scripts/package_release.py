@@ -1,6 +1,6 @@
 """Архив для пользователей: EXE, инструкция, фирменные ресурсы и лицензии.
 
-Запуск: python scripts/package_release.py dist/0.7.1
+Запуск: python scripts/package_release.py dist/0.8.0
 Видеоматериалы, база, .env и окружение разработчика сюда не попадают.
 """
 
@@ -28,7 +28,8 @@ def main():
             "docs/third-party-notices.txt",
             "docs/tiktok.md",
             "docs/live-streams.md",
-            "docs/release-0.7.1.md",
+            "docs/release-0.8.0.md",
+            "docs/editing.md",
             "docs/autopublishing.md",
             "docs/webcam.md",
             "docs/terms-ru.html",
@@ -77,6 +78,8 @@ def main():
         ffmpeg = next((ROOT / ".tools" / "ffmpeg").glob("**/ffmpeg.exe"))
         for name in ("LICENSE", "README.txt"):
             output.write(ffmpeg.parent.parent / name, "licenses/ffmpeg/" + name)
+        output.write(ROOT / ".tools/whisper/LICENSE", "licenses/whisper/LICENSE")
+        output.write(ROOT / ".tools/whisper/MODEL_LICENSE", "licenses/whisper/MODEL_LICENSE")
         python_license = Path(sys.base_prefix) / "LICENSE.txt"
         if python_license.is_file():
             output.write(python_license, "licenses/python/LICENSE.txt")

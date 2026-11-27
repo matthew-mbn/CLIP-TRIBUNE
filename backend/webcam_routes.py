@@ -16,6 +16,29 @@ from . import video
 router = APIRouter(prefix="/api/webcam")
 
 
+@router.post("/live-preview")
+def live_preview(request: WebcamFrameInput):
+    if not request.url or not request.rights:
+        raise ValueError("Нужна ссылка и подтверждение права на запись эфира")
+    from .live_preview import start
+
+    return start(request.url, request.height)
+
+
+@router.get("/live-preview/{identity}")
+def preview_frame(identity: str):
+    from .live_preview import frame
+
+    return frame(identity)
+
+
+@router.delete("/live-preview/{identity}")
+def stop_preview(identity: str):
+    from .live_preview import stop
+
+    return stop(identity)
+
+
 @router.post("/frame")
 def frame(request: WebcamFrameInput):
     remote = bool(request.url)

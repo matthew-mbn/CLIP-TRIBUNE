@@ -15,12 +15,16 @@ class SettingsPage(Page):
     title = "Настройки"
     subtitle = "Локальная обработка работает без ключей. Внешние сервисы подключаются по желанию."
 
+    def install_speech(self):
+        self.call("POST", "/editing/speech/install", callback=lambda _: self.app.show_page("Очередь"))
+
     def __init__(self, parent, app):
         super().__init__(parent, app)
         self.loaded_once = False
         self.variables = {}
         self.types = {}
         theme.button(self.toolbar(), "Сохранить настройки", self.save, True)
+        theme.button(self.toolbar(), "Скачать модель субтитров · 148 МБ", self.install_speech)
         legal = self.toolbar()
         theme.button(
             legal,

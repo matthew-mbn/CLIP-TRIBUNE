@@ -22,6 +22,12 @@ class FrameLayout(BaseModel):
     webcam_region: WebcamRegion | None = None
     webcam_fit: Literal["crop", "fit"] = "crop"
     main_fit: Literal["crop", "fit"] = "crop"
+    secondary_asset_id: str | None = None
+    secondary_start: float = Field(default=0, ge=0, le=28800, allow_inf_nan=False)
+    secondary_loop: bool = True
+    split_fit: Literal["crop", "fit"] = "fit"
+    split_audio: Literal["top", "bottom", "mix", "mute"] = "top"
+    subtitle_style: Literal["classic", "bold", "box", "red"] = "bold"
 
     @model_validator(mode="after")
     def webcam_selected(self):
@@ -60,6 +66,8 @@ class AdOptions(BaseModel):
     key_color: str = Field(default="#00FF00", pattern=r"^#[0-9a-fA-F]{6}$")
     similarity: float = Field(default=0.22, ge=0.01, le=0.8, allow_inf_nan=False)
     blend: float = Field(default=0.08, ge=0, le=0.5, allow_inf_nan=False)
+    pause_video: bool = True
+    sound: bool = True
 
 
 class RenderOptions(FrameLayout):
@@ -134,7 +142,7 @@ class LiveInput(RemoteInput, FrameLayout):
     """Запись всегда запускается явным действием пользователя и имеет пределы."""
 
     height: Literal[720, 1080] = 720
-    layout: Literal["single", "webcam"] = "single"
+    layout: Literal["single", "webcam", "split"] = "single"
     max_hours: float = Field(default=4, ge=0.05, le=24, allow_inf_nan=False)
     max_gb: int = Field(default=20, ge=1, le=500)
     segment_seconds: Literal[60, 120, 180, 300] = 120

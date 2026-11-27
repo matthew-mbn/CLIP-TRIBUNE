@@ -43,6 +43,7 @@ from .tiktok_routes import router as tiktok_router
 from .ads_routes import router as ads_router
 from .live_routes import router as live_router
 from .webcam_routes import router as webcam_router
+from .editing_routes import router as editing_router
 
 token_path = STORAGE / ".api-token"
 if not token_path.exists():
@@ -54,13 +55,15 @@ if not token_path.exists():
 LOCAL_TOKEN = token_path.read_text(encoding="utf-8")
 
 app = FastAPI(
-    title="CLIP TRIBUNE", version="0.7.1", description="Локальная студия автоматического видеомонтажа"
+    title="CLIP TRIBUNE", version="0.8.0", description="Локальная студия автоматического видеомонтажа"
 )
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "testserver"])
 app.include_router(tiktok_router)
 app.include_router(ads_router)
 app.include_router(live_router)
 app.include_router(webcam_router)
+
+app.include_router(editing_router)
 
 
 @app.middleware("http")
@@ -438,7 +441,9 @@ def control(action: str):
             update_settings(session, {"production": "running", "queue_paused": False})
         elif action == "stop":
             from .live_routes import stop_all
+            from .live_preview import stop_all as stop_previews
 
+            stop_previews()
             stop_all(session)
             update_settings(
                 session, {"production": "stopped", "queue_paused": True, "publishing_enabled": False}
@@ -506,13 +511,22 @@ def delete_clip(identity: str):
             raise ValueError("Ролик есть в истории TikTok; удаление заблокировано")
         active = session.scalars(
             select(RenderJob).where(
-                RenderJob.kind == "ad_overlay", RenderJob.status.in_(["pending", "analyzing", "rendering"])
+                RenderJob.kind.in_(["ad_overlay", "caption_transcribe", "caption_render"]),
+                RenderJob.status.in_(["pending", "analyzing", "rendering"]),
             )
         )
         if any(job.options.get("clip_id") == identity for job in active):
             raise ValueError("Дождитесь наложения рекламы или отмените задание в очереди")
         path = inside(clip.path)
-        for target in (path, path.with_suffix(".jpg"), path.with_suffix(".png"), path.with_suffix(".srt")):
+        for target in (
+            path,
+            path.with_suffix(".jpg"),
+            path.with_suffix(".png"),
+            path.with_suffix(".srt"),
+            path.with_suffix(".ass"),
+            path.with_suffix(".captions.json"),
+            path.with_suffix(".clean.mp4"),
+        ):
             target.unlink(missing_ok=True)
         session.delete(clip)
         session.commit()

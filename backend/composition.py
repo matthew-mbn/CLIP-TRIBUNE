@@ -89,15 +89,13 @@ def build(options, metadata, width, height, duration):
             ]
     current = "base"
     ad = options.get("ad_source")
+    start, length, pause = ad_timing(options, duration)
+    output_duration = duration + (length if pause else 0)
+    if pause:
+        graph += pause_picture("base", start, length)
+        current = "paused"
     if ad:
         banner = ad["mode"] == "banner"
-        start = 0 if banner else ad["start"]
-        if start >= duration:
-            raise ValueError("Вставка начинается после конца ролика")
-        length = duration if banner else (ad["duration"] or ad["metadata"]["duration"])
-        if not banner and ad["kind"] == "video":
-            length = min(length, ad["metadata"]["duration"])
-        length = min(length, duration - start)
         inputs += media_input(ad["path"], loop=banner, image=ad["kind"] == "image")
         margin = round(min(width, height) * ad["margin_percent"] / 100)
         ad_width = max(2, int(min(width - 2 * margin, width * ad["width_percent"] / 100)) // 2 * 2)
@@ -114,7 +112,7 @@ def build(options, metadata, width, height, duration):
         x = str(margin) if "left" in position else (f"W-w-{margin}" if "right" in position else "(W-w)/2")
         y = str(margin) if "top" in position else (f"H-h-{margin}" if "bottom" in position else "(H-h)/2")
         graph.append(
-            f"[base][advert]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:"
+            f"[{current}][advert]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:"
             f"enable='gte(t,{start})*lt(t,{start + length})'[advertised]"
         )
         current = "advertised"
@@ -124,8 +122,71 @@ def build(options, metadata, width, height, duration):
             f"[{index}:a:0]atrim=duration={duration},asetpts=PTS-STARTPTS,"
             f"apad=whole_dur={duration}[sound{index}]"
         )
+    sound_labels = []
     if audio_inputs:
         labels = "".join(f"[sound{index}]" for index in audio_inputs)
         mix = f"amix=inputs={len(audio_inputs)}:duration=longest," if len(audio_inputs) > 1 else ""
-        graph.append(labels + mix + f"atrim=duration={duration},loudnorm=I=-16:TP=-1.5:LRA=11[audio]")
-    return inputs, graph, current, bool(audio_inputs), width, height
+        graph.append(labels + mix + f"atrim=duration={duration}[main_audio]")
+        if pause:
+            if start > 0:
+                graph += [
+                    "[main_audio]asplit[ap][aq]",
+                    f"[ap]atrim=end={start},asetpts=PTS-STARTPTS[before_audio]",
+                ]
+                prefix = "[before_audio]"
+                source = "aq"
+            else:
+                prefix, source = "", "main_audio"
+            graph += [
+                f"anullsrc=r=48000:cl=stereo,atrim=duration={length}[silence]",
+                f"[{source}]atrim=start={start},asetpts=PTS-STARTPTS[after_audio]",
+                prefix + f"[silence][after_audio]concat=n={3 if start > 0 else 2}:v=0:a=1[paused_audio]",
+            ]
+            sound_labels.append("[paused_audio]")
+        else:
+            sound_labels.append("[main_audio]")
+    if ad and ad.get("sound", False) and ad["metadata"].get("audio"):
+        graph.append(
+            f"[{next_input}:a]atrim=duration={length},asetpts=PTS-STARTPTS,adelay={round(start * 1000)}:all=1,apad=whole_dur={output_duration}[ad_audio]"
+        )
+        sound_labels.append("[ad_audio]")
+    if sound_labels:
+        mix = (
+            f"amix=inputs={len(sound_labels)}:duration=longest:normalize=0," if len(sound_labels) > 1 else ""
+        )
+        graph.append(
+            "".join(sound_labels)
+            + mix
+            + f"atrim=duration={output_duration},loudnorm=I=-16:TP=-1.5:LRA=11[audio]"
+        )
+    return inputs, graph, current, bool(sound_labels), width, height
+
+
+def ad_timing(options, duration):
+    ad = options.get("ad_source")
+    if not ad:
+        return 0, 0, False
+    banner = ad["mode"] == "banner"
+    start = 0 if banner else ad["start"]
+    if start >= duration:
+        raise ValueError("Вставка начинается после конца ролика")
+    length = duration if banner else (ad["duration"] or ad["metadata"]["duration"])
+    if not banner and ad["kind"] == "video":
+        length = min(length, ad["metadata"]["duration"])
+    pause = not banner and ad.get("pause_video", False)
+    return start, length if pause else min(length, duration - start), pause
+
+
+def pause_picture(label, start, length):
+    # Вырезаем один кадр, продлеваем его, затем возвращаем оставшиеся кадры.
+    before = start > 0
+    graph = [f"[{label}]fps=30,split={3 if before else 2}" + ("[vp]" if before else "") + "[vh][vq]"]
+    if before:
+        graph.append(f"[vp]trim=end={start},setpts=PTS-STARTPTS[before_video]")
+    graph += [
+        f"[vh]trim=start={start}:duration=0.034,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={length},trim=duration={length}[hold_video]",
+        f"[vq]trim=start={start},setpts=PTS-STARTPTS[after_video]",
+        ("[before_video]" if before else "")
+        + f"[hold_video][after_video]concat=n={3 if before else 2}:v=1:a=0[paused]",
+    ]
+    return graph

@@ -12,10 +12,10 @@ datas = [
     (str(root / "docs" / "third-party-notices.txt"), "licenses"),
     (str(ffmpeg.parent.parent / "LICENSE"), "licenses/ffmpeg"),
     (str(ffmpeg.parent.parent / "README.txt"), "licenses/ffmpeg"),
-] + collect_data_files("customtkinter") + collect_data_files("tzdata") + collect_data_files("yt_dlp_ejs")
+] + [(str(root / ".tools" / "whisper" / name), "licenses/whisper") for name in ("LICENSE", "MODEL_LICENSE")] + collect_data_files("customtkinter") + collect_data_files("tzdata") + collect_data_files("yt_dlp_ejs")
 a = Analysis([str(root / "launcher.py")], pathex=[str(root)],
     binaries=[(str(ffmpeg), "bin"), (str(ffprobe), "bin"),
-              (str(Path(sys.executable).parent / "deno.exe"), "bin")], datas=datas,
+              (str(Path(sys.executable).parent / "deno.exe"), "bin")] + [(str(p), "bin/whisper") for p in (root / ".tools" / "whisper").iterdir() if p.suffix == ".dll" or p.name == "whisper-cli.exe"], datas=datas,
     hiddenimports=collect_submodules("uvicorn") + ["sqlalchemy.dialects.sqlite", "sqlalchemy.dialects.postgresql.psycopg"],
     excludes=["pytest", "ruff", "PyInstaller"], noarchive=False)
 pyz = PYZ(a.pure)

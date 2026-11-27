@@ -241,9 +241,23 @@ def select_candidates(
 
 
 def render(path, output, candidate, options, metadata, cancelled=lambda: False, subtitle_path=None):
+    if subtitle_path:
+        from .captions import burn
+
+        clean = Path(output).with_suffix(".clean.mp4")
+        render(path, clean, candidate, options, metadata, cancelled)
+        try:
+            return burn(clean, output, subtitle_path, options, cancelled)
+        except Exception:
+            clean.unlink(missing_ok=True)
+            Path(output).unlink(missing_ok=True)
+            raise
     width = int(options.get("resolution", "720"))
     height = width * 16 // 9
-    from .composition import build, media_input
+    from .composition import build, media_input, ad_timing
+
+    _, ad_length, paused = ad_timing(options, candidate["duration"])
+    output_duration = candidate["duration"] + (ad_length if paused else 0)
 
     extra_inputs, graph, current, has_audio, width, height = build(
         options, metadata, width, height, candidate["duration"]
@@ -253,10 +267,6 @@ def render(path, output, candidate, options, metadata, cancelled=lambda: False, 
         filters += ",eq=contrast=1.05:saturation=0.9"
     if options.get("preset") == "Action":
         filters += ",eq=contrast=1.08:saturation=1.08"
-    # Субтитры — отдельный SRT в папке результата; текст не попадает в shell.
-    if subtitle_path:
-        escaped = str(subtitle_path).replace("\\", "/").replace(":", "\\:")
-        filters += f",subtitles=filename='{escaped}':force_style='FontSize=20,MarginV=80'"
     title_file = None
     if options.get("title_overlay") and options.get("theme"):
         title_file = Path(output).with_suffix(".title.txt")
@@ -268,7 +278,7 @@ def render(path, output, candidate, options, metadata, cancelled=lambda: False, 
     command += media_input(path, start=candidate["start"]) + extra_inputs
     command += [
         "-t",
-        str(candidate["duration"]),
+        str(output_duration),
         "-filter_complex_threads",
         "1",
         "-filter_complex",
@@ -302,7 +312,7 @@ def render(path, output, candidate, options, metadata, cancelled=lambda: False, 
     try:
         run(command, cancelled, memory_mb=options.get("memory_limit_mb", 4096))
         result = probe(output)
-        if abs(result["duration"] - candidate["duration"]) > 1:
+        if abs(result["duration"] - output_duration) > 1:
             raise RuntimeError("Длительность экспорта не совпала с ожидаемой")
         if (result["width"], result["height"]) != (width, height):
             raise RuntimeError("Неверное разрешение экспорта")

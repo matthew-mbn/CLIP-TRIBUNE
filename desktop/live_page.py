@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import messagebox
 import customtkinter as ctk
 
+from .captions import STYLES
 from . import theme
 from .ads_page import card
 from .base import Page, date
@@ -28,6 +29,7 @@ FRAMING = {
     "Обрезать в вертикаль": "crop",
     "Исходные пропорции": "original",
     "Видео + вебка · 50/50": "webcam",
+    "Стрим с вебкой + геймплей": "split",
 }
 
 
@@ -104,6 +106,9 @@ class LivePage(Page):
             clips, "Кадрирование", "Размытый фон", list(FRAMING), stacked=True, width=26
         )
         self.webcam = WebcamPanel(clips, self, self.webcam_source)
+        from .gameplay import GameplayPanel
+
+        self.gameplay = GameplayPanel(clips, self)
         self.webcam_anchor = ctk.CTkFrame(clips, fg_color="transparent", height=1)
         self.webcam_anchor.pack(fill="x")
         self.framing.trace_add("write", lambda *_: self.webcam_layout())
@@ -120,9 +125,13 @@ class LivePage(Page):
         )
         self.subtitles = tk.BooleanVar(value=False)
         self.ads = tk.BooleanVar(value=False)
+
+        self.subtitle_style = theme.field(
+            extra, "Стиль субтитров", "Крупный с обводкой", list(STYLES), stacked=True
+        )
         ctk.CTkCheckBox(
             extra,
-            text="Субтитры через настроенный сервис речи",
+            text="Автоматические субтитры · локальное распознавание",
             variable=self.subtitles,
             font=("Segoe UI", 12),
         ).pack(anchor="w", pady=7)
@@ -254,6 +263,10 @@ class LivePage(Page):
         return dict(url=self.url.get().strip(), rights=True, height=int(self.height.get()))
 
     def webcam_layout(self):
+        self.gameplay.pack_forget()
+        if FRAMING[self.framing.get()] == "split":
+            self.gameplay.pack(fill="x", before=self.webcam_anchor)
+            self.gameplay.refresh()
         if FRAMING[self.framing.get()] == "webcam":
             self.webcam.pack(fill="x", before=self.webcam_anchor)
         else:
@@ -272,16 +285,21 @@ class LivePage(Page):
                 duration=int(self.length.get()),
                 count=int(self.count.get()),
                 min_score=int(self.score.get()),
-                framing=FRAMING[self.framing.get()] if FRAMING[self.framing.get()] != "webcam" else "blur",
+                framing=FRAMING[self.framing.get()]
+                if FRAMING[self.framing.get()] not in ("webcam", "split")
+                else "blur",
                 resolution=self.height.get(),
                 theme=self.subject.get().strip(),
                 subtitles=self.subtitles.get(),
+                subtitle_style=STYLES[self.subtitle_style.get()],
                 use_ads=self.ads.get(),
                 tiktok_auto=self.tiktok_auto.options(),
                 youtube_auto=self.youtube_auto.options(),
             )
             if FRAMING[self.framing.get()] == "webcam":
                 data.update(self.webcam.options())
+            if FRAMING[self.framing.get()] == "split":
+                data.update(self.gameplay.options())
         except ValueError as error:
             messagebox.showerror("Параметры записи", str(error), parent=self)
             return

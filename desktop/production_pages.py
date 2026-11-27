@@ -54,6 +54,9 @@ class QueuePage(Page):
             "ad_overlay": "Реклама",
             "live_clip": "Момент эфира",
             "live_export": "Сборка эфира",
+            "speech_setup": "Модель речи",
+            "caption_transcribe": "Распознавание речи",
+            "caption_render": "Субтитры",
         }
         theme.replace_rows(
             self.tree,
@@ -118,7 +121,13 @@ class LibraryPage(Page):
         theme.button(row, "В публикацию", self.enqueue)
         theme.button(row, "Ещё из исходника", self.reedit)
         theme.button(row, "Удалить", self.delete)
-        theme.button(self.toolbar(), "Добавить рекламу", self.advertise)
+        actions = self.toolbar()
+        theme.button(actions, "Добавить рекламу", self.advertise)
+        theme.button(actions, "Субтитры", self.captions)
+        theme.button(actions, "Сохранить выбранные в папку…", self.export_folder)
+        theme.button(actions, "Папка для новых роликов…", self.auto_folder)
+        self.folder_notice = theme.text(self, "", muted=True, wraplength=900)
+        self.call("GET", "/editing/folder", callback=self.folder_loaded)
         preview = ttk.Frame(self)
         preview.pack(fill="both", expand=True, pady=10)
         self.preview = ttk.Label(preview)
@@ -137,6 +146,36 @@ class LibraryPage(Page):
         )
         self.info.pack(fill="both", expand=True, pady=10)
         self.info.configure(state="disabled")
+
+    def folder_loaded(self, result):
+        self.folder_notice.configure(text="Автосохранение: " + (result["folder"] or "папка не выбрана"))
+
+    def auto_folder(self):
+        folder = filedialog.askdirectory(parent=self, title="Копировать новые ролики в папку")
+        if folder:
+            self.call("PUT", "/editing/folder", {"folder": folder}, self.folder_loaded)
+
+    def export_folder(self):
+        selected = self.selected(self.tree)
+        if not selected:
+            return
+        folder = filedialog.askdirectory(parent=self, title="Сохранить выбранные ролики")
+        if folder:
+            self.call(
+                "POST",
+                "/editing/export",
+                dict(folder=folder, clip_ids=selected),
+                lambda r: messagebox.showinfo(
+                    "Экспорт", f"Сохранено роликов: {len(r['paths'])}", parent=self
+                ),
+            )
+
+    def captions(self):
+        selected = self.selected(self.tree)
+        if selected:
+            from .captions import CaptionEditor
+
+            CaptionEditor(self, self.app, selected[0])
 
     def advertise(self):
         selected = self.selected(self.tree)

@@ -68,7 +68,14 @@ def test_ad_chromakey_timing_and_loop(session, composition_media, tmp_path, mode
     base, _, creative = composition_media
     asset = ads.import_ad(session, creative)
     config = AdOptions(
-        enabled=True, asset_id=asset.id, mode=mode, start=1, position="center", width_percent=50
+        enabled=True,
+        asset_id=asset.id,
+        mode=mode,
+        start=1,
+        position="center",
+        width_percent=50,
+        pause_video=False,
+        sound=False,
     )
     output = tmp_path / "result.mp4"
     video.render(
@@ -102,7 +109,7 @@ def test_split_offset_loop_and_audio(session, composition_media, tmp_path, sound
         ad_source=ads.snapshot(
             session,
             AdOptions(
-                enabled=True, asset_id=ad.id, mode="banner", position="center", width_percent=20
+                enabled=True, asset_id=ad.id, mode="banner", position="center", width_percent=20, sound=False
             ).model_dump(),
         ),
     )

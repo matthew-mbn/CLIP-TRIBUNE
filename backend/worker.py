@@ -20,13 +20,14 @@ from .animation_engine import geometric_animation
 from .config import REDIS_URL, STORAGE
 from .database import Session, log, settings, update_settings
 from .models import ClipCandidate, PublishJob, RenderJob, RenderedClip, Source, SourceAsset, now, uid
-from .providers import HttpSpeechProvider, content_metadata, write_srt
+from .providers import content_metadata
+from . import captions, speech
 from .schemas import PublishInput, RenderOptions
 from .security import file_hash
 from .services import claim_job, create_jobs, prepare_publish, recover_jobs
 from .sources import download_media, import_file, remote_suffix
 from .source_identity import creator_title
-from .youtube import QuotaExceeded, search_trends, secret, upload
+from .youtube import QuotaExceeded, search_trends, upload
 
 
 def cancellation_check(job_id):
@@ -87,6 +88,8 @@ def process_job(job_id):
                     asset.metadata_json = {**asset.metadata_json, **identity_info}
                     session.commit()
                 job.message = "Скачано: " + asset.name + ". Видео доступно в разделе «Источники»."
+            elif job.kind in ("speech_setup", "caption_transcribe", "caption_render"):
+                captions.process(session, job, options, cancelled)
             elif job.kind in ("live_clip", "live_export"):
                 from .live_clips import process as process_live, export as export_live
 
@@ -187,13 +190,7 @@ def process_job(job_id):
                 transcript = []
                 warning = ""
                 if options.get("subtitles"):
-                    if secret("SPEECH_API_URL"):
-                        try:
-                            transcript = HttpSpeechProvider().transcribe(asset.path)
-                        except Exception:
-                            warning = "Распознавание недоступно; экспорт без субтитров"
-                    else:
-                        warning = "SpeechProvider не настроен; экспорт без субтитров"
+                    transcript = speech.transcribe(asset.path, cancelled)
                 for index, selected_candidate in enumerate(selected):
                     if cancelled():
                         raise video.Cancelled()
@@ -205,11 +202,10 @@ def process_job(job_id):
                     session.add(candidate)
                     session.commit()
                     output = STORAGE / "clips" / (uid() + ".mp4")
-                    srt = output.with_suffix(".srt")
-                    has_srt = (
-                        write_srt(transcript, candidate.start, candidate.duration, srt)
+                    subtitle_path = (
+                        captions.prepare(output, transcript, candidate.start, candidate.duration, options)
                         if transcript
-                        else False
+                        else None
                     )
                     render_start = time.monotonic()
                     video.render(
@@ -219,7 +215,7 @@ def process_job(job_id):
                         options,
                         asset.metadata_json,
                         cancelled,
-                        srt if has_srt else None,
+                        subtitle_path,
                     )
                     render_seconds += time.monotonic() - render_start
                     save_clip(
@@ -272,6 +268,7 @@ def save_clip(
     source_clip=None,
     source_name=None,
     metadata_extra=None,
+    title_suffix=" · реклама",
 ):
     metadata = (
         dict(source_clip.metadata_json)
@@ -288,7 +285,7 @@ def save_clip(
         )
     )
     if source_clip:
-        metadata["titles"] = [source_clip.title + " · реклама"]
+        metadata["titles"] = [source_clip.title + title_suffix]
         metadata["source_clip_id"] = source_clip.id
     metadata.update(
         reasons=selected["reasons"],
@@ -331,8 +328,12 @@ def save_clip(
     if config["output_folder"]:
         # Пользователь явно выбирает эту папку в настройках. Имена уникальны.
         folder = Path(config["output_folder"]).resolve()
-        folder.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(output, folder / output.name)
+        from .exports import copy_video
+
+        try:
+            copy_video(output, folder, clip.title, clip.id)
+        except OSError as error:
+            log(session, "Клип сохранён в библиотеке, но экспорт в папку не удался: " + str(error), "error")
     if job.options.get("automatic") and config["auto_queue"]:
         prepare_publish(
             session, PublishInput(clip_ids=[clip.id], channel_id=config["auto_channel_id"] or None)

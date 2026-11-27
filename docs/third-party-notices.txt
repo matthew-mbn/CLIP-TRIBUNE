@@ -22,3 +22,6 @@ https://www.gyan.dev/ffmpeg/builds/ and https://github.com/FFmpeg/FFmpeg
 
 Social platform names belong to their respective owners. This application is
 not affiliated with or endorsed by TikTok, Google or YouTube.
+
+whisper.cpp 1.7.6 — MIT, https://github.com/ggml-org/whisper.cpp
+Whisper base multilingual model — OpenAI MIT; downloaded separately from https://huggingface.co/ggerganov/whisper.cpp. Audio is processed locally when this model is installed.

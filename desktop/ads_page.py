@@ -37,7 +37,7 @@ def card(parent):
 
 class AdsPage(Page):
     title = "Реклама"
-    subtitle = "Ваша вставка поверх видео. Зелёный фон исчезает, основной ролик продолжает играть."
+    subtitle = "Вставка с удалением зелёного фона. Разовая реклама может ставить основное видео на паузу."
 
     def __init__(self, parent, app):
         super().__init__(parent, app)
@@ -75,6 +75,12 @@ class AdsPage(Page):
             wraplength=400,
             font=("Segoe UI", 11),
         )
+        self.pause = tk.BooleanVar(value=True)
+        self.sound = tk.BooleanVar(value=True)
+        ctk.CTkCheckBox(
+            timing, text="Пауза видео и звука на время разовой рекламы", variable=self.pause
+        ).pack(anchor="w", pady=6)
+        ctk.CTkCheckBox(timing, text="Звук рекламной вставки", variable=self.sound).pack(anchor="w", pady=6)
         placement = card(left)
         theme.text(placement, "03  /  Размещение и фон", font=("Segoe UI", 16, "bold"))
         self.position = theme.field(placement, "Положение", "Снизу по центру", list(POSITIONS), stacked=True)
@@ -115,7 +121,7 @@ class AdsPage(Page):
         theme.button(preview, "Обновить предпросмотр", self.show_preview)
         theme.text(
             right,
-            "Проверка фона и положения на кадре 0,5 сек. вставки.\nРеклама накладывается без звука.",
+            "Проверка фона и положения на кадре 0,5 сек. вставки.\nЗвук включается отдельной настройкой.",
             muted=True,
             wraplength=340,
             font=("Segoe UI", 11),
@@ -160,6 +166,8 @@ class AdsPage(Page):
             )
         )
         self.enabled.set(config["enabled"])
+        self.pause.set(config.get("pause_video", True))
+        self.sound.set(config.get("sound", True))
         self.mode.set(next(label for label, value in MODES.items() if value == config["mode"]))
         self.position.set(next(label for label, value in POSITIONS.items() if value == config["position"]))
         for variable, key in [
@@ -204,6 +212,8 @@ class AdsPage(Page):
         try:
             return dict(
                 enabled=self.enabled.get(),
+                pause_video=self.pause.get(),
+                sound=self.sound.get(),
                 asset_id=self.assets.get(self.asset.get(), ""),
                 mode=MODES[self.mode.get()],
                 start=float(self.start.get().replace(",", ".")),

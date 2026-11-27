@@ -9,7 +9,6 @@ from .schemas import RenderOptions
 
 def create_jobs(session, options: RenderOptions):
     from .ads import snapshot
-    from pathlib import Path
 
     assets = [session.get(SourceAsset, asset_id) for asset_id in options.asset_ids]
     if not assets or any(asset is None for asset in assets):
@@ -31,21 +30,7 @@ def create_jobs(session, options: RenderOptions):
     saved = options.model_dump(exclude={"asset_ids", "project_id"})
     saved["ad_source"] = snapshot(session, duration=options.duration) if options.use_ads else None
     if options.layout == "split":
-        secondary = (
-            session.get(SourceAsset, options.secondary_asset_id) if options.secondary_asset_id else None
-        )
-        if not secondary or not secondary.rights or not Path(secondary.path).is_file():
-            raise ValueError("Выберите нижний ролик с подтверждёнными правами")
-        available = secondary.metadata_json["duration"] - options.secondary_start
-        if available <= 0:
-            raise ValueError("Начало нижнего ролика должно быть раньше его конца")
-        if not options.secondary_loop and available < options.duration:
-            raise ValueError("Нижний ролик слишком короткий. Включите повтор или уменьшите время начала")
-        if secondary.id in options.asset_ids:
-            raise ValueError("Для нижней половины выберите другой исходник")
-        saved["split_source"] = dict(
-            id=secondary.id, path=secondary.path, name=secondary.name, metadata=dict(secondary.metadata_json)
-        )
+        saved["split_source"] = split_source(session, options)
     jobs = []
     for asset in assets:
         job = RenderJob(
@@ -140,3 +125,22 @@ def prepare_publish(session, request):
         jobs.append(job)
     session.commit()
     return jobs
+
+
+def split_source(session, options):
+    """Проверка нижнего ролика общая для студии и прямого эфира."""
+    from pathlib import Path
+
+    secondary = session.get(SourceAsset, options.secondary_asset_id) if options.secondary_asset_id else None
+    if not secondary or not secondary.rights or not Path(secondary.path).is_file():
+        raise ValueError("Выберите нижний ролик с подтверждёнными правами")
+    available = secondary.metadata_json["duration"] - options.secondary_start
+    if available <= 0:
+        raise ValueError("Начало нижнего ролика должно быть раньше его конца")
+    if not options.secondary_loop and available < options.duration:
+        raise ValueError("Нижний ролик слишком короткий: измените начало или включите повтор")
+    if secondary.id in getattr(options, "asset_ids", []):
+        raise ValueError("Для нижней половины выберите другой исходник")
+    return dict(
+        id=secondary.id, path=secondary.path, name=secondary.name, metadata=dict(secondary.metadata_json)
+    )

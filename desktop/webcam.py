@@ -43,7 +43,7 @@ def composition_preview(image, region, main_fit="crop", webcam_fit="crop"):
 
 
 class WebcamEditor(ctk.CTkToplevel):
-    def __init__(self, parent, image, config, on_save):
+    def __init__(self, parent, image, config, on_save, on_close=None):
         super().__init__(parent)
         self.title("CLIP TRIBUNE · Область вебки")
         self.geometry(
@@ -54,7 +54,9 @@ class WebcamEditor(ctk.CTkToplevel):
         self.image = image.convert("RGB")
         self.region = config.get("webcam_region")
         self.on_save = on_save
+        self.on_close = on_close
         self.anchor = None
+        self.frozen = False
         self.image_box = (0, 0, 1, 1)
         self.source_photo = self.result_photo = None
         body = ctk.CTkFrame(self, fg_color="transparent")
@@ -91,17 +93,23 @@ class WebcamEditor(ctk.CTkToplevel):
         self.webcam_fit.trace_add("write", lambda *_: self.draw_result())
         self.notice = theme.text(
             body,
-            "Кадр без рекламы и субтитров. Звук берётся из исходного стрима один раз.",
+            "Если сейчас реклама Twitch, дождитесь стрима: кадр обновляется без переподключения. Начните выделение, чтобы зафиксировать кадр.",
             muted=True,
             wraplength=900,
         )
         actions = ctk.CTkFrame(body, fg_color="transparent")
         actions.pack(fill="x", pady=(12, 0))
         self.save_button = theme.button(actions, "Применить область", self.save, True)
+        theme.button(actions, "Ждать / обновлять кадр", self.unfreeze)
         theme.button(actions, "Отмена", self.destroy)
+        self.protocol("WM_DELETE_WINDOW", self.destroy)
         self.transient(parent.winfo_toplevel())
         self.bind("<Escape>", lambda _: self.destroy())
         self.draw_timer = self.after(80, self.draw)
+
+    def unfreeze(self):
+        self.frozen = False
+        self.region = None
 
     @staticmethod
     def fit_label(value):
@@ -122,6 +130,7 @@ class WebcamEditor(ctk.CTkToplevel):
         return (event.x - x) / width, (event.y - y) / height
 
     def begin(self, event):
+        self.frozen = True
         point = self.point(event)
         self.anchor = point if all(0 <= n <= 1 for n in point) else None
 
@@ -189,6 +198,9 @@ class WebcamEditor(ctk.CTkToplevel):
             self.destroy()
 
     def destroy(self):
+        if self.on_close:
+            callback, self.on_close = self.on_close, None
+            callback()
         if getattr(self, "draw_timer", None):
             self.after_cancel(self.draw_timer)
         # ImageTk и StringVar освобождаем до ухода из главного потока.
@@ -210,13 +222,15 @@ class WebcamPanel(ctk.CTkFrame):
         self.page, self.source = page, source
         self.config_data, self.source_key = {}, None
         self.editor = None
+        self.preview_id = None
+        self.poll_timer = None
         self.second = theme.field(self, "Кадр / пропуск начала, сек.", "0", stacked=True)
         controls = ctk.CTkFrame(self, fg_color="transparent")
         controls.pack(fill="x", pady=5)
         theme.button(controls, "Выделить вебку на кадре", self.load, True)
         self.status = theme.text(
             self,
-            "Верх — видео, низ — вебка. Если Twitch показывает рекламу, задайте пропуск начала эфира: 0–120 секунд.",
+            "Для эфира открывается живой кадр. Дождитесь окончания рекламы Twitch и выделите вебку; соединение остаётся открытым.",
             muted=True,
             wraplength=420,
             font=("Segoe UI", 11),
@@ -244,9 +258,45 @@ class WebcamPanel(ctk.CTkFrame):
                 picture,
                 self.config_data if key == self.source_key else {},
                 lambda config: self.saved(key, config),
+                self.stop_preview,
             )
 
-        self.page.call("POST", "/webcam/frame", data, loaded)
+        if data.get("url"):
+            self.stop_preview()
+
+            def started(result):
+                self.preview_id = result["id"]
+                self.poll_live(key, loaded)
+
+            self.page.call("POST", "/webcam/live-preview", data, started)
+        else:
+            self.page.call("POST", "/webcam/frame", data, loaded)
+
+    def poll_live(self, key, first_frame):
+        identity = self.preview_id
+        if not identity or not self.winfo_exists():
+            return
+
+        def received(result):
+            if identity != self.preview_id or not self.winfo_exists():
+                return
+            if result.get("png"):
+                if not self.editor or not self.editor.winfo_exists():
+                    first_frame(result)
+                elif not self.editor.frozen:
+                    self.editor.image = Image.open(io.BytesIO(base64.b64decode(result["png"]))).convert("RGB")
+                    self.editor.draw()
+            self.poll_timer = self.after(2000, lambda: self.poll_live(key, first_frame))
+
+        self.page.call("GET", f"/webcam/live-preview/{identity}", callback=received)
+
+    def stop_preview(self):
+        if self.poll_timer:
+            self.after_cancel(self.poll_timer)
+            self.poll_timer = None
+        if self.preview_id:
+            identity, self.preview_id = self.preview_id, None
+            self.page.app.async_call("DELETE", f"/webcam/live-preview/{identity}", None, None, True)
 
     def saved(self, key, config):
         self.source_key, self.config_data = key, config
@@ -259,6 +309,7 @@ class WebcamPanel(ctk.CTkFrame):
         return {"layout": "webcam", **self.config_data}
 
     def destroy(self):
+        self.stop_preview()
         if self.editor and self.editor.winfo_exists():
             self.editor.destroy()
         super().destroy()

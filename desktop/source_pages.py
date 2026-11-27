@@ -5,6 +5,7 @@ import customtkinter as ctk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 
+from .captions import STYLES
 from . import theme
 from .base import Page
 
@@ -211,7 +212,7 @@ class StudioPage(Page):
             source_body,
             "Экран",
             "Один ролик",
-            ["Один ролик", "Два ролика: верх / низ", "Видео + вебка · 50/50"],
+            ["Один ролик", "Два ролика: верх / низ", "Стрим с вебкой + геймплей", "Видео + вебка · 50/50"],
             stacked=True,
         )
         self.split_panel = ctk.CTkFrame(source_body, fg_color="transparent")
@@ -309,6 +310,10 @@ class StudioPage(Page):
         self.framing_widget = form.winfo_children()[-1].winfo_children()[-1]
         self.subtitles = tk.BooleanVar()
         self.overlay = tk.BooleanVar()
+
+        self.subtitle_style = theme.field(
+            form, "Стиль субтитров", "Крупный с обводкой", list(STYLES), stacked=True
+        )
         self.use_ads = tk.BooleanVar(value=True)
         for label, variable in [("Добавить субтитры", self.subtitles), ("Тема поверх видео", self.overlay)]:
             ctk.CTkSwitch(
@@ -373,6 +378,9 @@ class StudioPage(Page):
         )
 
     def change_layout(self):
+        if self.layout_mode.get() == "Стрим с вебкой + геймплей":
+            self.split_fit.set("Вписать целиком")
+            self.split_audio.set("Верхний ролик")
         self.split_panel.pack_forget()
         self.webcam.pack_forget()
         if self.layout_mode.get() == "Один ролик":
@@ -417,7 +425,7 @@ class StudioPage(Page):
     def create(self):
         selected = self.selected(self.tree)
         if selected:
-            split = self.layout_mode.get() == "Два ролика: верх / низ"
+            split = self.layout_mode.get() in ("Два ролика: верх / низ", "Стрим с вебкой + геймплей")
             try:
                 offset = float(self.secondary_start.get().replace(",", ".")) if split else 0
                 webcam = self.webcam.options() if self.layout_mode.get() == "Видео + вебка · 50/50" else {}
@@ -433,6 +441,7 @@ class StudioPage(Page):
                 resolution=self.resolution.get(),
                 framing=FRAMING[self.framing.get()],
                 subtitles=self.subtitles.get(),
+                subtitle_style=STYLES[self.subtitle_style.get()],
                 title_overlay=self.overlay.get(),
                 use_ads=self.use_ads.get(),
                 layout="split" if split else "single",

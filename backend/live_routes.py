@@ -56,6 +56,10 @@ def start(request: LiveInput):
             raise ValueError("Уже идёт запись. Сначала остановите текущий эфир")
         options = request.model_dump(exclude={"url", "rights"})
         options["ad_source"] = snapshot(session, duration=request.duration) if request.use_ads else None
+        if request.layout == "split":
+            from .services import split_source
+
+            options["split_source"] = split_source(session, request)
         if request.youtube_auto.enabled:
             from .youtube_auto import validate_setup as validate_youtube
 

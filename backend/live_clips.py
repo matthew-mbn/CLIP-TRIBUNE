@@ -9,10 +9,9 @@ from sqlalchemy import select
 from . import video
 from .config import FFMPEG, STORAGE
 from .models import LiveRecording, LiveSegment, RenderedClip, RenderJob, SourceAsset, uid
-from .providers import HttpSpeechProvider, write_srt
+from . import captions, speech
 from .security import file_hash, inside
 from .source_identity import recording_identity
-from .youtube import secret
 from .database import settings
 
 
@@ -188,13 +187,7 @@ def process(session, job, options, cancelled):
             return
         transcript, warning = [], ""
         if options.get("subtitles"):
-            if secret("SPEECH_API_URL"):
-                try:
-                    transcript = HttpSpeechProvider().transcribe(str(path))
-                except Exception:
-                    warning = "Распознавание недоступно; экспорт без субтитров"
-            else:
-                warning = "SpeechProvider не настроен; экспорт без субтитров"
+            transcript = speech.transcribe(path, cancelled)
         for index, candidate in enumerate(candidates):
             if cancelled():
                 raise video.Cancelled()
@@ -202,8 +195,11 @@ def process(session, job, options, cancelled):
             job.message = f"Момент эфира {index + 1}/{len(candidates)}"
             session.commit()
             output = STORAGE / "clips" / (uid() + ".mp4")
-            subtitle_path = output.with_suffix(".srt")
-            has_subtitles = write_srt(transcript, candidate["start"], candidate["duration"], subtitle_path)
+            subtitle_path = (
+                captions.prepare(output, transcript, candidate["start"], candidate["duration"], options)
+                if transcript
+                else None
+            )
             rendered = False
             try:
                 video.render(
@@ -213,7 +209,7 @@ def process(session, job, options, cancelled):
                     options,
                     metadata,
                     cancelled,
-                    subtitle_path if has_subtitles else None,
+                    subtitle_path,
                 )
                 rendered = True
                 save_clip(
@@ -237,7 +233,8 @@ def process(session, job, options, cancelled):
             except Exception:
                 if not rendered:
                     output.unlink(missing_ok=True)
-                    subtitle_path.unlink(missing_ok=True)
+                    if subtitle_path:
+                        subtitle_path.unlink(missing_ok=True)
                 raise
         job.message = f"Сохранено моментов эфира: {len(candidates) + already}"
 

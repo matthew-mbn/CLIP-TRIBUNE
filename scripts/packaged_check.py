@@ -205,6 +205,41 @@ def run(report_path):
         )
     assert upper_pixel[2] > 220 and upper_pixel[0] < 35
     assert lower_pixel[0] > 220 and lower_pixel[2] < 35
+    caption_job = request(
+        "POST",
+        f"/editing/captions/{clips[0]['id']}/render",
+        dict(
+            style="bold",
+            cues=[
+                dict(start=1, end=4, text="CLIP TRIBUNE"),
+                dict(start=5, end=6, text="Hidden", enabled=False),
+            ],
+        ),
+    )
+    wait_job(caption_job["id"])
+    caption_clip = next(c for c in request("GET", "/clips") if c["job_id"] == caption_job["id"])
+    export = request(
+        "POST", "/editing/export", dict(folder=str(STORAGE / "export-check"), clip_ids=[caption_clip["id"]])
+    )
+    assert Path(export["paths"][0]).is_file()
+    paused_job = request(
+        "POST",
+        "/ads/apply",
+        dict(
+            clip_id=clips[0]["id"],
+            config={**config, "mode": "once", "start": 2, "duration": 2, "pause_video": True},
+        ),
+    )
+    wait_job(paused_job["id"])
+    paused_clip = next(c for c in request("GET", "/clips") if c["job_id"] == paused_job["id"])
+    assert abs(paused_clip["duration"] - clips[0]["duration"] - 2) < 0.15
+    speech_check = False
+    if sample := os.getenv("CLIP_TRIBUNE_CHECK_SPEECH_SAMPLE"):
+        from backend.speech import transcribe
+
+        words = transcribe(sample)
+        assert any("subtitles" in row["text"].lower() for row in words), words
+        speech_check = True
     network_downloads = []
     live_check = None
     if live_url := os.getenv("CLIP_TRIBUNE_CHECK_LIVE_URL"):
@@ -293,6 +328,32 @@ def run(report_path):
                 assert editor.result_photo is not None
                 editor.save()
                 assert app.page.webcam.options()["webcam_region"] == webcam_region
+            if name == "Библиотека":
+                from desktop.captions import CaptionEditor
+
+                caption_editor = CaptionEditor(app, app, caption_clip["id"])
+                deadline = time.monotonic() + 15
+                app.after(30, check)
+                tk.Tk.mainloop(app)
+                assert len(caption_editor.cues) == 2
+                caption_editor.second.set("2")
+                caption_editor.preview()
+                deadline = time.monotonic() + 30
+                app.after(30, check)
+                tk.Tk.mainloop(app)
+                assert caption_editor.photo is not None
+                caption_editor.update()
+                from PIL import ImageGrab
+
+                ImageGrab.grab(
+                    bbox=(
+                        caption_editor.winfo_rootx(),
+                        caption_editor.winfo_rooty(),
+                        caption_editor.winfo_rootx() + caption_editor.winfo_width(),
+                        caption_editor.winfo_rooty() + caption_editor.winfo_height(),
+                    )
+                ).save(STORAGE / "caption-editor.png")
+                caption_editor.destroy()
             if name == "TikTok":
                 app.page.mode.set("Прямая публикация")
                 assert not app.pending and not app.page.creator_ready
@@ -312,6 +373,8 @@ def run(report_path):
             json.dumps(
                 dict(
                     ok=True,
+                    editing=True,
+                    local_speech=speech_check,
                     pages=list(PAGES),
                     diagnostics=diagnostics,
                     rendered_clip=metadata,
